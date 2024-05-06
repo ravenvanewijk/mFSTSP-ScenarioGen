@@ -1,13 +1,12 @@
 import os
 import geopy.distance
 import pandas as pd
-import geopandas as gpd
 import osmnx as ox
-import networkx as nx
 import numpy as np
 import taxicab as tc
-from shapely.geometry import Point, LineString
-from shapely.ops import linemerge
+import matplotlib.pyplot as plt
+from shapely.geometry import LineString, MultiLineString
+from shapely.ops import linemerge, transform
 
 class mFSTSPRoute:
     def __init__(self, instance_path, sol_type = 'ALL', solutions_name = 'tbl_solutions'):
@@ -55,6 +54,8 @@ class mFSTSPRoute:
         nearest_city = self.get_nearest_city((self.custnodes.iloc[0][' latDeg'], self.custnodes.iloc[0][' lonDeg']))
 
         if nearest_city == 'Buffalo, NY, USA':
+            # get customer limits. polygon of customers. instead of city map
+            #________FIX_______
             lims = (43.027642, 42.831743, -78.698845, -78.949956)
         else:
             raise Exception("This city is not supported yet, choose another type")
@@ -63,22 +64,7 @@ class mFSTSPRoute:
         # self.G = ox.graph_from_place(nearest_city, network_type='drive')
         # Adjusted box sizes to include the entire map
         self.G = ox.graph_from_bbox(bbox=lims, network_type='drive')
-        G_projected = ox.project_graph(self.G)
 
-        # Extract projected coordinates and add them to the original DataFrame
-        self.custnodes['proj_x'], self.custnodes['proj_y'] = self.project_customers(G_projected)
-
-        # to_inspect = 19
-        # nearest_node = ox.nearest_nodes(G_projected, 
-        #                                   self.custnodes.loc[to_inspect]['proj_x'], 
-        #                                   self.custnodes.loc[to_inspect]['proj_y'])
-
-
-        # fig, ax = ox.plot_graph(self.G, node_size=30, node_color='#66ccff', node_zorder=3,
-        #                     bgcolor='k', edge_linewidth=1.5, edge_color='#e2e2e2')
-        # ax.scatter(self.custnodes.loc[to_inspect][' lonDeg'], self.custnodes.loc[to_inspect][' latDeg'], color='red', s=100, label='Additional Point', zorder=5)
-        # ax.scatter(G_projected.nodes[nearest_node]['lon'], G_projected.nodes[nearest_node]['lat'], color='red', s=100, label='Additional Point', zorder=5)
-        
     def get_nearest_city(self, cust_coords):
         """Find nearest city. Either Seattle or Buffalo.
         arg: type, description
@@ -94,22 +80,6 @@ class mFSTSPRoute:
                 dist = geopy.distance.geodesic(cust_coords, (lat, lon))
                 idx = index
         return cities[idx]
-    
-    def project_customers(self, G_projected):
-        """Projects the customer nodes onto a projected graph.
-        arg: type, description
-        G_projected: networkx multidirected projected graph"""
-        # Create a GeoDataFrame from custnodes, so that these can be projected to projected graph
-        cust_gdf = gpd.GeoDataFrame(
-                        self.custnodes,
-                        geometry=[Point(xy) for xy in zip(self.custnodes[' lonDeg'], self.custnodes[' latDeg'])],
-                        crs='EPSG:4326'
-                            )
-
-        # Project the GeoDataFrame to match the graph's CRS
-        cust_gdf_projected = cust_gdf.to_crs(G_projected.graph['crs'])
-
-        return cust_gdf_projected.geometry.x, cust_gdf_projected.geometry.y
 
     def construct_route(self, file):
         # Extract all truck route nodes
@@ -124,51 +94,83 @@ class mFSTSPRoute:
         cust_nodes = cust_nodes[0].unique().tolist()
         # cust_nodes contains last node #nodes+1. The last one should always be the depot
         cust_nodes[-1] = 0
-        route = []
-
+        route = None 
         # zip the customers to create pairs
         cust_pairs = zip(cust_nodes[:-1], cust_nodes[1:])
 
-        # for U, V in cust_pairs:
-        # Now use the taxicab package to find the shortest path between 2 customer nodes.
-        # Args come in this order: 0: distance, 1: nodes 2: unfinished linepart begin 3: unfinished linepart end
-        # Look up location of customer nodes U and V in the custnode df
-        routepart = tc.distance.shortest_path(self.G,   (self.custnodes.iloc[0][' latDeg'], 
-                                                    self.custnodes.iloc[0][' lonDeg']), 
-                                                    (self.custnodes.iloc[19][' latDeg'], 
-                                                    self.custnodes.iloc[19][' lonDeg']))
-        
-        # Remove first and last node from the core list. They are included in the unfinished parts.
-        # routepart[1].pop(0)
-        # routepart[1].pop(-1)
-        # Use the nodes to extract all edges u, v of graph G that the vehicle completely traverses
-        routepart_edges = zip(routepart[1][:-1], routepart[1][1:])
+        for U, V in cust_pairs:
+            print(U,V)
+            custroute = []
+            # Now use the taxicab package to find the shortest path between 2 customer nodes.
+            # Args come in this order: 0: distance, 1: nodes 2: unfinished linepart begin 3: unfinished linepart end
+            # Look up location of customer nodes U and V in the custnode df
+            # ____ figure out if this uses distance (length) of edges.
+            # ____ if it's time, need for additional extra step. Time to cross edge. new weights. use that as new weight
+            routepart = tc.distance.shortest_path(self.G,   (self.custnodes.iloc[U][' latDeg'], 
+                                                        self.custnodes.iloc[U][' lonDeg']), 
+                                                        (self.custnodes.iloc[V][' latDeg'], 
+                                                        self.custnodes.iloc[V][' lonDeg']))
+            
+            # Use the nodes to extract all edges u, v of graph G that the vehicle completely traverses
+            routepart_edges = zip(routepart[1][:-1], routepart[1][1:])
 
-        # routepart at beginning
-        route.append(routepart[2])
-        # For every pair of edges, append the route with the Shapely LineStrings
-        for u, v in routepart_edges:
-            # Some edges have this attribute embedded, when geometry is curved
-            if 'geometry' in self.G.edges[(u, v, 0)]:
-                route.append(self.G.edges[(u, v, 0)]['geometry'])
-            # Other edges don't have this attribute. These are straight lines between their two nodes.
+            # routepart at beginning
+            custroute.append(routepart[2])
+            # For every pair of edges, append the route with the Shapely LineStrings
+            for u, v in routepart_edges:
+                # Some edges have this attribute embedded, when geometry is curved
+                if 'geometry' in self.G.edges[(u, v, 0)]:
+                    custroute.append(self.G.edges[(u, v, 0)]['geometry'])
+                # Other edges don't have this attribute. These are straight lines between their two nodes.
+                else:
+                    # So, get a straight line between the nodes and append that line piece
+                    custroute.append(LineString([(self.G.nodes[u]['x'], self.G.nodes[u]['y']), 
+                                            (self.G.nodes[v]['x'], self.G.nodes[v]['y'])]))
+                    
+            # Additional check for first linepart directionality. Sometimes it might be facing the wrong way.
+            # The end of the beginning (incomplete) linestring should match
+            if not custroute[1].coords[0] == routepart[2].coords[-1]:
+                # Check if flipped version does align
+                if custroute[1].coords[0] == routepart[2].coords[0]:
+                    custroute[0] = reverse_linestring(custroute[0])
+                else:
+                    raise Exception('Taxicab alignment Error: Coordinates of beginning LineString does not align')
+
+            # Check whether final incomplete linestring is in proper direction, similar check
+            if not custroute[-1].coords[-1] == routepart[3].coords[0]:
+                # Check if flipped version does align
+                if custroute[-1].coords[-1] == routepart[3].coords[-1]:
+                    custroute.append(reverse_linestring(routepart[3]))
+                else:
+                    raise Exception('Taxicab alignment Error: Coordinates of final LineString does not align')
             else:
-                # So, get a straight line between the nodes and append that line piece
-                route.append(LineString([(self.G.nodes[u]['x'], self.G.nodes[u]['y']), 
-                                        (self.G.nodes[v]['x'], self.G.nodes[v]['y'])]))
-        
-        route.append(routepart[3])
-        
-        # These are a bunch of lines, these need to combine them into one multilinestring
-        route_line = linemerge(route)
+                custroute.append(routepart[3])
+            # for ls in custroute:
+            #     plot_linestring(ls)
+            # add customer route total global route
+            custroute_linestring = linemerge(custroute)  # Combine all parts into a single LineString
 
-        # Now that we have the line, we can get the waypoints in LAT LON. 
+            # Merge the current custroute into the main route
+            if route is None:
+                route = custroute_linestring
+            else:
+                if route.coords[0] == custroute_linestring.coords[-1]:
+                    # If a circular loop is generated, very slightly shift the last coordinates of custroute
+                    # Ensures proper directionality of the route
+                    custroute_linestring = shift_circ_ls(custroute_linestring)
+                route = linemerge([route, custroute_linestring])
+
+            if type(route) == MultiLineString:
+                raise Exception(f'Resulting route is a MultiLineString from nodes {U} to {V}.'
+                                + ' Possibly the segments do not connect properly.')
+
+        # Now that we have the line, we can get the waypoints in LAT LON.
         # The graph is in LON LAT, but BlueSky works with LAT LON.
-        self.route_waypoints[file] = list(zip(route_line.xy[1], route_line.xy[0]))
-        self.route_lats[file] = route_line.xy[1]
-        self.route_lons[file] = route_line.xy[0]
+        self.route_waypoints[file] = list(zip(route.xy[1], route.xy[0]))
+        self.route_lats[file] = route.xy[1]
+        self.route_lons[file] = route.xy[0]
 
-    def construct_scenario(self, file):
+    def construct_scenario(self, file, save_name):
         route_waypoints = self.route_waypoints[file]
         route_lats = self.route_lats[file]
         route_lons = self.route_lons[file]
@@ -219,31 +221,50 @@ class mFSTSPRoute:
         # Turn speed of 5 kts usually works well
         turn_spd = 5 #kts
 
-        # So let's create this command now
+        # Initiate adddtwaypoints command
         scen_text += f'00:00:00>ADDTDWAYPOINTS {acid}' # First add the root of the command
-        # Then start looping through waypoints
+        # Loop through waypoints
+        # Refresh command after 100 iterations, BlueSky cannot handle everything in one go
+        i = 0
+        j = 0
+        scn_lim = 100
         for wplat, wplon, turn in zip(route_lats, route_lons, turns):
             # Check if this waypoint is a turn
             if turn:
                 wptype = 'TURNSPD'
             else:
                 wptype = 'FLYBY'
+            if j == 0 and i > scn_lim:
+                scen_text += '\n'
+                # Enable vertical and horizontal navigation after first set of wps
+                scen_text += f'00:00:00>LNAV {acid} ON\n'
+                scen_text += f'00:00:00>VNAV {acid} ON\n'
+                # Turn trail on, tracing for testing
+                scen_text += '00:00:00>TRAIL ON'
+            if i > scn_lim:
+                j += 1
+                scen_text += f'\n00:{"{:02}".format(j * 5)}:00>ADDTDWAYPOINTS {acid}'
+                i = 0
+
+            i += 1
             # Add the text for this waypoint. It doesn't matter if we always add a turn speed, as BlueSky will
             # ignore it if the wptype is set as FLYBY
             scen_text += f',{wplat},{wplon},{cruise_alt},{cruise_spd},{wptype},{turn_spd}'
 
-        # Add a newline at the end of the addwaypoints command
+        if j == 0:
+            scen_text += '\n'
+            # Enable vertical and horizontal navigation after first set of wps
+            scen_text += f'00:00:00>LNAV {acid} ON\n'
+            scen_text += f'00:00:00>VNAV {acid} ON\n'
+            # Turn trail on, tracing for testing
+            scen_text += '00:00:00>TRAIL ON'
+
+        # Add a newline at the end of the addtdwaypoints command
         scen_text += '\n'
 
-        # Now we just need to make sure that the aircraft is configured properly. So we enable its vertical and horizontal navigation
-        scen_text += f'00:00:00>LNAV {acid} ON\n'
-        scen_text += f'00:00:00>VNAV {acid} ON\n'
-        # Turn trail on, tracing for testing
-        scen_text += '00:00:00>TRAIL ON \n'
-        scen_text += f'00:00:00>POS {acid}\n'
-        # We also want the aircraft removed when it reaches the destination. We can use an ATDIST command for that.
+        # Delete AC at route end
         destination_tolerance = 3/1852 # we consider it arrived if it is within 3 metres of the destination, converted to nautical miles.
-        scen_text += f'00:00:00>{acid} ATDIST {route_lats[-1]} {route_lons[-1]} {destination_tolerance} DEL {acid}\n'
+        scen_text += f'00:{"{:02}".format(j * 5)}:00>{acid} ATDIST {route_lats[-1]} {route_lons[-1]} {destination_tolerance} DEL {acid}\n'
 
         # # Change directory to scenario folder
         # try:
@@ -251,8 +272,8 @@ class mFSTSPRoute:
         # except:
         #     raise Exception('Scenario folder not found')
 
-        # Now we save the text in a scenario file
-        with open('RTMtest.scn', 'w') as f:
+        # Save the text in a scenario file
+        with open(save_name, 'w') as f:
             f.write(scen_text)
 
 
@@ -270,26 +291,57 @@ def kwikqdrdist(lata, lona, latb, lonb):
     qdr     = np.degrees(np.arctan2(dlon * cavelat, dlat)) % 360
     return qdr, dist
 
+def plot_linestring(line, point=None, overlap=True):
+    """Helper function, plots a Shapely LineString
+
+    args: type, description:
+        line: Shapely Linestring, sequence of coordinates of a geometry
+        point: tuple, coordinates of an additional point to plot
+        overlap: bool, plot on a new figure yes/no"""
+    if not overlap:
+        plt.figure()
+    x, y = line.xy
+    plt.plot(x, y, marker='o')  # Plot the line with markers at vertices
+    plt.plot(x[-1],y[-1],'rs') 
+    if not point is None:
+        plt.plot(point[0], point[1], 'gs')
+    plt.title('LineString Plot')
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.grid(True)  # Optional: adds a grid
+    plt.show()
+
+def reverse_linestring(line):
+    """Helper function, reverses a Shapely LineString
+
+    arg: type, description
+    line: Shapely Linestring, line to reverse"""
+    reversed_coords = LineString(list(line.coords)[::-1])
+    return reversed_coords
+
+def shift_circ_ls(line, adjustment=(1e-9, 1e-9)):
+    """Helper function, adjusts a Shapely LineString's last coordinates, in case of circular loops
+    arg: type, description
+    line: Shapely Linestring, line to change last coordinates from
+    adjustment: tuple, delta of change"""
+
+    if line is None or line.is_empty:
+        return line
+
+    # Extract coordinates to a list
+    coords = list(line.coords)
+
+    # Modify the last coordinate
+    last_coord = coords[-1]
+    new_last_coord = (last_coord[0] + adjustment[0], last_coord[1] + adjustment[1])
+    coords[-1] = new_last_coord
+
+    # Create a new LineString with modified coordinates
+    return LineString(coords)
 
 routes = mFSTSPRoute("/Users/raven/Documents/TU/MSc/Thesis/Code/mFSTSP/Problems/20170606T123331779163",
                      "tbl_solutions_103_1_Heuristic.csv")
 routes.construct_route("tbl_solutions_103_1_Heuristic.csv")
-routes.construct_scenario("tbl_solutions_103_1_Heuristic.csv")
+routes.construct_scenario("tbl_solutions_103_1_Heuristic.csv", "Buffalo.scn")
 # routes = mFSTSPRoute("/Users/raven/Documents/TU/MSc/Thesis/Code/mFSTSP/Problems/20170606T113038113409",
 #                      "tbl_solutions_103_1_Heuristic.csv")
-
-
-
-# <MULTILINESTRING ((-78.812 42.91, -78.813 42.91, -78.814 42.91, -78.814 42.9...>
-# route_line.xy
-# Traceback (most recent call last):
-#   File "<string>", line 1, in <module>
-#   File "/Users/raven/Documents/TU/MSc/Thesis/Code/mFSTSP-ScenarioGen/.venv/lib/python3.9/site-packages/shapely/geometry/base.py", line 229, in xy
-#     raise NotImplementedError
-# NotImplementedError
-
-
-# route_line
-# <LINESTRING (4.471 51.923, 4.473 51.924, 4.475 51.924, 4.478 51.924, 4.48 51...>
-# route_line.xy
-# (array('d', [4.470622761691262, 4.473167643594631, 4.474864219123583, 4.47788480878786..., 4.4911524452493135, 4.4914243281920285]), array('d', [51.92291411691797, 51.923533842070725, 51.923856414675406, 51.92443055982...09, 51.92056518330626, 51.92067251358025]))
