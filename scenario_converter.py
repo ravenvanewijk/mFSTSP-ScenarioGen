@@ -1,5 +1,6 @@
 import os
 import geopy.distance
+import math
 import pandas as pd
 import osmnx as ox
 import numpy as np
@@ -16,42 +17,37 @@ class mFSTSPRoute:
 
         files = os.listdir(instance_path)
         solutions_files = [filename for filename in files if solutions_name in filename]
-        self.solutions = {}
-        for solution_file in solutions_files:
-            if (solution_file.split('_')[-1] != 'Heuristic.csv' and sol_type.upper() != 'HEURISTIC') \
-                and sol_type.upper() != 'ALL':
-                continue
-            if not solution_file == 'tbl_solutions_103_1_Heuristic.csv':
-                continue
+        self.data = {}
+        solution_file = 'tbl_solutions_103_1_Heuristic.csv'
+        if solution_file not in solutions_files:
+            raise Exception(f'File {solution_file} not found')
             
-            # extract all data from solution file
-            data = pd.read_csv(instance_path + '/' + solution_file)
-            # metadata is first few lines
-            metadata = data.head(3)
-            # strip all spaces
-            metadata.columns = metadata.columns.str.strip()
-            # routing solution is embedded in everything after the fourth row
-            solution = data.tail(-4)
-            solution.columns = data.iloc[3]
-            solution.columns.name = None
-            solution.columns = solution.columns.str.strip()
-            # string space stripping
-            solution.loc[:, 'vehicleType'] = solution['vehicleType'].str.strip()
-            solution.loc[:, 'startTime'] = pd.to_numeric(solution['startTime'], errors='coerce')
-            # Store the data in the dictionary
-            self.solutions[solution_file] = {
-                'problemName': metadata['problemName'].iloc[0],
-                'numUAVs': int(metadata['numUAVs'].iloc[0]),
-                'requireTruckAtDepot': bool(metadata['requireTruckAtDepot'].iloc[0]),
-                'requireDriver': bool(metadata['requireDriver'].iloc[0]),
-                'solution': solution
-                                            }
-        
+        # extract all data from solution file
+        data = pd.read_csv(instance_path + '/' + solution_file)
+        # metadata is first few lines
+        metadata = data.head(3)
+        # strip all spaces
+        metadata.columns = metadata.columns.str.strip()
+        # routing solution is embedded in everything after the fourth row
+        solution = data.tail(-4)
+        solution.columns = data.iloc[3]
+        solution.columns.name = None
+        solution.columns = solution.columns.str.strip()
+        # string space stripping
+        solution.loc[:, 'vehicleType'] = solution['vehicleType'].str.strip()
+        solution.loc[:, 'startTime'] = pd.to_numeric(solution['startTime'], errors='coerce')
+        # Store the data in the dictionary
+        self.data['problemName'] = metadata['problemName'].iloc[0]
+        self.data['numUAVs'] = int(metadata['numUAVs'].iloc[0]),
+        self.data['requireTruckAtDepot'] = bool(metadata['requireTruckAtDepot'].iloc[0]),
+        self.data['requireDriver'] = bool(metadata['requireDriver'].iloc[0]),
+        self.data['solution'] = solution
+
         # Load customer locations
-        self.custnodes = pd.read_csv(instance_path + '/tbl_locations.csv')
+        self.customers = pd.read_csv(instance_path + '/tbl_locations.csv')
 
         # Find nearest city to the customers, used to identify the city where the scenario is going to be
-        nearest_city = self.get_nearest_city((self.custnodes.iloc[0][' latDeg'], self.custnodes.iloc[0][' lonDeg']))
+        nearest_city = self.get_nearest_city((self.customers.iloc[0][' latDeg'], self.customers.iloc[0][' lonDeg']))
 
         if nearest_city == 'Buffalo, NY, USA':
             # get customer limits. polygon of customers. instead of city map
@@ -81,22 +77,22 @@ class mFSTSPRoute:
                 idx = index
         return cities[idx]
 
-    def construct_route(self, file):
+    def construct_truckroute(self):
         # Extract all truck route nodes
-        truckactivities = self.solutions[file]['solution'][self.solutions[file]['solution']['vehicleType'] == 'Truck']
+        truckactivities = self.data['solution'][self.data['solution']['vehicleType'] == 'Truck']
         # Should already be sorted, redundancy
         truckactivities = truckactivities.sort_values('startTime')
         # Get all traveling activities
         truckdriving = truckactivities[truckactivities['Description'].str.startswith(' Travel from node')]
         # Extract node sequence from traveling activities
-        cust_nodes = truckdriving['Description'].str.extractall(r'(\d+)')
-        cust_nodes = cust_nodes.astype(int)
-        cust_nodes = cust_nodes[0].unique().tolist()
+        self.cust_nodes = truckdriving['Description'].str.extractall(r'(\d+)')
+        self.cust_nodes = self.cust_nodes.astype(int)
+        self.cust_nodes = self.cust_nodes[0].unique().tolist()
         # cust_nodes contains last node #nodes+1. The last one should always be the depot
-        cust_nodes[-1] = 0
+        self.cust_nodes[-1] = 0
         route = None 
         # zip the customers to create pairs
-        cust_pairs = zip(cust_nodes[:-1], cust_nodes[1:])
+        cust_pairs = zip(self.cust_nodes[:-1], self.cust_nodes[1:])
 
         for U, V in cust_pairs:
             print(U,V)
@@ -106,10 +102,10 @@ class mFSTSPRoute:
             # Look up location of customer nodes U and V in the custnode df
             # ____ figure out if this uses distance (length) of edges.
             # ____ if it's time, need for additional extra step. Time to cross edge. new weights. use that as new weight
-            routepart = tc.distance.shortest_path(self.G,   (self.custnodes.iloc[U][' latDeg'], 
-                                                        self.custnodes.iloc[U][' lonDeg']), 
-                                                        (self.custnodes.iloc[V][' latDeg'], 
-                                                        self.custnodes.iloc[V][' lonDeg']))
+            routepart = tc.distance.shortest_path(self.G,   (self.customers.iloc[U][' latDeg'], 
+                                                        self.customers.iloc[U][' lonDeg']), 
+                                                        (self.customers.iloc[V][' latDeg'], 
+                                                        self.customers.iloc[V][' lonDeg']))
             
             # Use the nodes to extract all edges u, v of graph G that the vehicle completely traverses
             routepart_edges = zip(routepart[1][:-1], routepart[1][1:])
@@ -149,7 +145,8 @@ class mFSTSPRoute:
             #     plot_linestring(ls)
             # add customer route total global route
             custroute_linestring = linemerge(custroute)  # Combine all parts into a single LineString
-
+            self.customers.loc[U, 'Route_lat'] = custroute[0].coords[0][1]
+            self.customers.loc[U, 'Route_lon'] = custroute[0].coords[0][0]
             # Merge the current custroute into the main route
             if route is None:
                 route = custroute_linestring
@@ -166,14 +163,42 @@ class mFSTSPRoute:
 
         # Now that we have the line, we can get the waypoints in LAT LON.
         # The graph is in LON LAT, but BlueSky works with LAT LON.
-        self.route_waypoints[file] = list(zip(route.xy[1], route.xy[0]))
-        self.route_lats[file] = route.xy[1]
-        self.route_lons[file] = route.xy[0]
+        self.route_waypoints = list(zip(route.xy[1], route.xy[0]))
+        self.route_lats = route.xy[1]
+        self.route_lons = route.xy[0]
 
-    def construct_scenario(self, file, save_name):
-        route_waypoints = self.route_waypoints[file]
-        route_lats = self.route_lats[file]
-        route_lons = self.route_lons[file]
+    def get_sorties(self):
+        # Get all drone activities
+        droneactivities = self.data['solution'][self.data['solution']['vehicleType'] == 'UAV']
+        # Filter the sorties
+        sorties = droneactivities[droneactivities['Description'].str.contains('Fly to UAV customer')]
+        rendezvouss = droneactivities[droneactivities['activityType'] == (' UAV travels empty')]
+        rendezvouss.loc[:, 'endNode'] = rendezvouss['endNode'].astype(int)
+        self.cust_lim = max(rendezvouss['endNode'])
+        # Convert rendezvouss to dictionary for quicker lookup
+        rendezvouss_dict = {int(row['startNode']): int(row['endNode']) for index, row in rendezvouss.iterrows()}
+        self.trips = []
+
+        # Process sorties
+        for index, sortie in sorties.iterrows():
+            i = int(sortie['startNode'])
+            j = int(sortie['endNode'])
+            
+            # Check if j is in rendezvouss_dict
+            if j in rendezvouss_dict:
+                if rendezvouss_dict[j] >= self.cust_lim:
+                    # Set higher nodes to 0, this is the depot again
+                    k = 0
+                else:
+                    k = rendezvouss_dict[j]
+                self.trips.append((i, j, k))
+            else:
+                raise ValueError(f"No corresponding rendezvous found for endNode {j} starting from node {i}")
+    
+    def construct_scenario(self, save_name, sorties=False):
+        route_waypoints = self.route_waypoints
+        route_lats = self.route_lats
+        route_lons = self.route_lons
 
         i = 1 # Start at second waypoint
         turns = [True] # Doesn't matter what the first waypoint is designated as, so just have it as true.
@@ -193,7 +218,7 @@ class mFSTSPRoute:
                 turns.append(True)
             else:
                 turns.append(False)
-            i+= 1
+            i += 1
 
         # Let the vehicle slow down for the depot
         turns.append(True)
@@ -227,23 +252,32 @@ class mFSTSPRoute:
         # Refresh command after 100 iterations, BlueSky cannot handle everything in one go
         i = 0
         j = 0
-        scn_lim = 100
+        cust_i = 0
+        self.scn_lim = 100
         for wplat, wplon, turn in zip(route_lats, route_lons, turns):
             # Check if this waypoint is a turn
             if turn:
                 wptype = 'TURNSPD'
             else:
                 wptype = 'FLYBY'
-            if j == 0 and i > scn_lim:
+            if j == 0 and i > self.scn_lim:
                 scen_text += '\n'
                 # Enable vertical and horizontal navigation after first set of wps
                 scen_text += f'00:00:00>LNAV {acid} ON\n'
                 scen_text += f'00:00:00>VNAV {acid} ON\n'
                 # Turn trail on, tracing for testing
                 scen_text += '00:00:00>TRAIL ON'
-            if i > scn_lim:
+            if i > self.scn_lim:
+                added = cust_i
+                while str(self.customers['Route_lat'].loc[self.cust_nodes[cust_i]]) in scen_text and \
+                    str(self.customers['Route_lon'].loc[self.cust_nodes[cust_i]]) in scen_text and \
+                    cust_i + 1 < len(self.cust_nodes):
+                    cust_i += 1
+                
+                scen_text = self.sortie_scen(scen_text, acid, j, added, cust_i)
+
                 j += 1
-                scen_text += f'\n00:{"{:02}".format(j * 5)}:00>ADDTDWAYPOINTS {acid}'
+                scen_text += f'\n00:{"{:02}".format(j * self.scn_lim // 20)}:00>ADDTDWAYPOINTS {acid}'
                 i = 0
 
             i += 1
@@ -264,7 +298,7 @@ class mFSTSPRoute:
 
         # Delete AC at route end
         destination_tolerance = 3/1852 # we consider it arrived if it is within 3 metres of the destination, converted to nautical miles.
-        scen_text += f'00:{"{:02}".format(j * 5)}:00>{acid} ATDIST {route_lats[-1]} {route_lons[-1]} {destination_tolerance} DEL {acid}\n'
+        scen_text += f'00:{"{:02}".format(j * self.scn_lim // 20)}:00>{acid} ATDIST {route_lats[-1]} {route_lons[-1]} {destination_tolerance} DEL {acid}\n'
 
         # # Change directory to scenario folder
         # try:
@@ -276,6 +310,25 @@ class mFSTSPRoute:
         with open(save_name, 'w') as f:
             f.write(scen_text)
 
+    def sortie_scen(self, scen_text, acid, J, added=None, cust_i=None):
+        if not added is None and not cust_i is None:
+            passed_custs = self.cust_nodes[added : cust_i]
+        else:
+            passed_custs = self.cust_nodes
+        for node in passed_custs:
+            matching_trip = next((trip for trip in self.trips if trip[0] == node), None)
+            if matching_trip:
+                i = matching_trip[0]
+                j = matching_trip[1]
+                k = matching_trip[2]
+                i_coords = f"{self.customers.loc[i]['Route_lat']}/{self.customers.loc[i]['Route_lon']}"
+                j_lat = f"{self.customers.loc[j][' latDeg']}"
+                j_lon = f"{self.customers.loc[j][' lonDeg']}"
+                k_coords = f"{self.customers.loc[k]['Route_lat']}/{self.customers.loc[k]['Route_lon']}"
+                scen_text += f"\n00:{'{:02}'.format(J * self.scn_lim // 20)}:00>ADDOPERATIONPOINTS {acid}, {i_coords}, SORTIE, 5, M600, "
+                scen_text += f"{j_lat}, {j_lon}, {k_coords}, 100, 25"
+
+        return scen_text
 
 def kwikqdrdist(lata, lona, latb, lonb):
     """Gives quick and dirty qdr[deg] and dist [m]
@@ -341,7 +394,8 @@ def shift_circ_ls(line, adjustment=(1e-9, 1e-9)):
 
 routes = mFSTSPRoute("/Users/raven/Documents/TU/MSc/Thesis/Code/mFSTSP/Problems/20170606T123331779163",
                      "tbl_solutions_103_1_Heuristic.csv")
-routes.construct_route("tbl_solutions_103_1_Heuristic.csv")
-routes.construct_scenario("tbl_solutions_103_1_Heuristic.csv", "Buffalo.scn")
+routes.get_sorties()
+routes.construct_truckroute()
+routes.construct_scenario("Buffalo.scn")
 # routes = mFSTSPRoute("/Users/raven/Documents/TU/MSc/Thesis/Code/mFSTSP/Problems/20170606T113038113409",
 #                      "tbl_solutions_103_1_Heuristic.csv")
