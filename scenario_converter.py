@@ -10,20 +10,13 @@ from shapely.geometry import LineString, MultiLineString
 from shapely.ops import linemerge, transform
 
 class mFSTSPRoute:
-    def __init__(self, instance_path, sol_type = 'ALL', solutions_name = 'tbl_solutions'):
+    def __init__(self, input_dir, sol_file):
         self.route_waypoints = {}
         self.route_lats = {}
         self.route_lons = {}
-
-        files = os.listdir(instance_path)
-        solutions_files = [filename for filename in files if solutions_name in filename]
         self.data = {}
-        solution_file = 'tbl_solutions_103_1_Heuristic.csv'
-        if solution_file not in solutions_files:
-            raise Exception(f'File {solution_file} not found')
-            
         # extract all data from solution file
-        data = pd.read_csv(instance_path + '/' + solution_file)
+        data = pd.read_csv(input_dir + '/' + sol_file)
         # metadata is first few lines
         metadata = data.head(3)
         # strip all spaces
@@ -44,12 +37,9 @@ class mFSTSPRoute:
         self.data['solution'] = solution
 
         # Load customer locations
-        self.customers = pd.read_csv(instance_path + '/tbl_locations.csv')
+        self.customers = pd.read_csv(input_dir + '/tbl_locations.csv')
         # 4 km border for the map is sufficient
         lims = self.get_map_lims(4)
-        
-        # This is too small:
-        # self.G = ox.graph_from_place(nearest_city, network_type='drive')
         # Adjusted box sizes to include the entire map
         self.G = ox.graph_from_bbox(bbox=lims, network_type='drive')
 
@@ -324,11 +314,11 @@ class mFSTSPRoute:
         destination_tolerance = 3/1852 # we consider it arrived if it is within 3 metres of the destination, converted to nautical miles.
         scen_text += f'00:{"{:02}".format(j * self.scn_lim // 20)}:00>{acid} ATDIST {route_lats[-1]} {route_lons[-1]} {destination_tolerance} DEL {acid}\n'
 
-        # # Change directory to scenario folder
-        # try:
-        #     os.chdir(root_path + '/scenario')
-        # except:
-        #     raise Exception('Scenario folder not found')
+        # Change directory to scenario folder
+        try:
+            os.chdir(os.getcwd() + '/scenario')
+        except:
+            raise Exception('Scenario folder not found')
 
         # Save the text in a scenario file
         with open(save_name, 'w') as f:
@@ -385,7 +375,7 @@ def plot_linestring(line, point=None, overlap=True):
     plt.title('LineString Plot')
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
-    plt.grid(True)  # Optional: adds a grid
+    plt.grid(True)
     plt.show()
 
 def reverse_linestring(line):
@@ -415,11 +405,3 @@ def shift_circ_ls(line, adjustment=(1e-9, 1e-9)):
 
     # Create a new LineString with modified coordinates
     return LineString(coords)
-
-routes = mFSTSPRoute("/Users/raven/Documents/TU/MSc/Thesis/Code/mFSTSP/Problems/20170606T123331779163",
-                     "tbl_solutions_103_1_Heuristic.csv")
-routes.get_sorties()
-routes.construct_truckroute()
-routes.construct_scenario("Buffalo.scn")
-# routes = mFSTSPRoute("/Users/raven/Documents/TU/MSc/Thesis/Code/mFSTSP/Problems/20170606T113038113409",
-#                      "tbl_solutions_103_1_Heuristic.csv")
