@@ -45,37 +45,53 @@ class mFSTSPRoute:
 
         # Load customer locations
         self.customers = pd.read_csv(instance_path + '/tbl_locations.csv')
-
-        # Find nearest city to the customers, used to identify the city where the scenario is going to be
-        nearest_city = self.get_nearest_city((self.customers.iloc[0][' latDeg'], self.customers.iloc[0][' lonDeg']))
-
-        if nearest_city == 'Buffalo, NY, USA':
-            # get customer limits. polygon of customers. instead of city map
-            #________FIX_______
-            lims = (43.027642, 42.831743, -78.698845, -78.949956)
-        else:
-            raise Exception("This city is not supported yet, choose another type")
+        # 4 km border for the map is sufficient
+        lims = self.get_map_lims(4)
         
         # This is too small:
         # self.G = ox.graph_from_place(nearest_city, network_type='drive')
         # Adjusted box sizes to include the entire map
         self.G = ox.graph_from_bbox(bbox=lims, network_type='drive')
 
-    def get_nearest_city(self, cust_coords):
-        """Find nearest city. Either Seattle or Buffalo.
-        arg: type, description
-        cust_coords: tuple, coordinates of single customer in instance
-        """
-        dist = np.inf
-        idx = np.inf
-        cities = ['Seattle, Washington, USA', 'Buffalo, NY, USA']
-        for index, city in enumerate(cities):
-            city_centre = ox.geocode_to_gdf(city).centroid[0]
-            lat, lon = city_centre.y, city_centre.x
-            if dist > geopy.distance.geodesic(cust_coords, (lat, lon)):
-                dist = geopy.distance.geodesic(cust_coords, (lat, lon))
-                idx = index
-        return cities[idx]
+    def get_map_lims(self, margin, unit='km'):
+        """Function to get map limits where all customers fit in.
+        Args: type, description
+        margin: float or int, margin for borders of the map
+        unit: string, unit for provided margin"""
+        
+        # Conversion factors
+        unit_conversion = {
+            'km': 1,
+            'm': 1 / 1000,             # 1000 meters in a kilometer
+            'mi': 1.60934,             # 1 mile is approximately 1.60934 kilometers
+            'nm': 1.852                # 1 nautical mile is approximately 1.852 kilometers
+        }
+
+        # Convert margin to kilometers
+        if unit in unit_conversion:
+            margin_km = margin * unit_conversion[unit]
+        else:
+            raise ValueError(f"Unsupported unit: {unit}. Use 'km', 'm', 'mi', or 'nm'.")
+
+        # Get the max and min latitudes and longitudes
+        latmax = self.customers[' latDeg'].max()
+        latmin = self.customers[' latDeg'].min()
+        lonmax = self.customers[' lonDeg'].max()
+        lonmin = self.customers[' lonDeg'].min()
+
+        # Convert margin from km to degrees
+        lat_margin_deg = margin_km / 111.32  # 1 degree latitude is approximately 111.32 km
+        avg_lat = (latmax + latmin) / 2
+        lon_margin_deg = margin_km / (111.32 * math.cos(math.radians(avg_lat)))  # Adjust longitude margin by latitude
+
+        # Calculate the new limits
+        box_latmax = latmax + lat_margin_deg
+        box_latmin = latmin - lat_margin_deg
+        box_lonmax = lonmax + lon_margin_deg
+        box_lonmin = lonmin - lon_margin_deg
+
+        # Return the coordinates as a tuple
+        return (box_latmax, box_latmin, box_lonmax, box_lonmin)
 
     def construct_truckroute(self):
         # Extract all truck route nodes
@@ -212,8 +228,8 @@ class mFSTSPRoute:
             angle=abs(a2-a1)
             if angle>180:
                 angle=360-angle
-            # In general, we noticed that we don't need to slow down if the turn is smaller than 25 degrees. However, this will depend
-            # on the cruise speed of the drones.
+            # In general, we noticed that we don't need to slow down if the turn is smaller than 25 degrees
+            #  However, this will depend on the cruise speed of the vehicle.
             if angle > 25:
                 turns.append(True)
             else:
@@ -234,7 +250,7 @@ class mFSTSPRoute:
         acid = 'TRUCK'
         actype = 'Truck'
         acalt = 0 # ft, ground altitude
-        acspd = 5 if turns[1] else 25 #kts, set it as 5 if the first waypoint is a turn waypoint.
+        acspd = 0 # start with 0 speed from depot
         scen_text += f'00:00:00>CRE {acid} {actype} {route_lats[0]} {route_lons[0]} {achdg} {acalt} {acspd}\n'
 
         # After creating it, we want to add all the waypoints. We can do that using the ADDTDWAYPOINTS command.
@@ -260,21 +276,25 @@ class mFSTSPRoute:
                 wptype = 'TURNSPD'
             else:
                 wptype = 'FLYBY'
-            if j == 0 and i > self.scn_lim:
-                scen_text += '\n'
-                # Enable vertical and horizontal navigation after first set of wps
-                scen_text += f'00:00:00>LNAV {acid} ON\n'
-                scen_text += f'00:00:00>VNAV {acid} ON\n'
-                # Turn trail on, tracing for testing
-                scen_text += '00:00:00>TRAIL ON'
             if i > self.scn_lim:
                 added = cust_i
-                while str(self.customers['Route_lat'].loc[self.cust_nodes[cust_i]]) in scen_text and \
-                    str(self.customers['Route_lon'].loc[self.cust_nodes[cust_i]]) in scen_text and \
-                    cust_i + 1 < len(self.cust_nodes):
+                while str(self.customers['Route_lat'].loc[self.cust_nodes[cust_i]]) + ',' +\
+                        str(self.customers['Route_lon'].loc[self.cust_nodes[cust_i]]) in scen_text and \
+                        cust_i + 1 < len(self.cust_nodes):
                     cust_i += 1
                 
                 scen_text = self.sortie_scen(scen_text, acid, j, added, cust_i)
+                if j == 0:
+                    scen_text += '\n'
+                    # Check whether depot is an operation point. If so, delay the LNAV and VNAV
+                    # LNAV and VNAV will cause the truck to start moving before the operation has taken place
+                    D = "01" if 'ADDOPERATIONPOINTS TRUCK, ' + str(route_lats[0]) + '/' + str(route_lons[0]) \
+                        in scen_text else "00"
+                    # Enable vertical and horizontal navigation after first set of wps and operation points iteration
+                    scen_text += f'00:00:{D}>LNAV {acid} ON\n'
+                    scen_text += f'00:00:{D}>VNAV {acid} ON\n'
+                    # Turn trail on, tracing for testing
+                    scen_text += f'00:00:{D}>TRAIL ON'
 
                 j += 1
                 scen_text += f'\n00:{"{:02}".format(j * self.scn_lim // 20)}:00>ADDTDWAYPOINTS {acid}'
@@ -287,11 +307,15 @@ class mFSTSPRoute:
 
         if j == 0:
             scen_text += '\n'
+            # Check whether depot is an operation point. If so, delay the LNAV and VNAV
+            # LNAV and VNAV will cause the truck to start moving before the operation has taken place
+            D = "01" if 'ADDOPERATIONPOINTS TRUCK, ' + str(route_lats[0]) + '/' + str(route_lons[0]) \
+                in scen_text else "00"
             # Enable vertical and horizontal navigation after first set of wps
-            scen_text += f'00:00:00>LNAV {acid} ON\n'
-            scen_text += f'00:00:00>VNAV {acid} ON\n'
+            scen_text += f'00:00:{D}>LNAV {acid} ON\n'
+            scen_text += f'00:00:{D}>VNAV {acid} ON\n'
             # Turn trail on, tracing for testing
-            scen_text += '00:00:00>TRAIL ON'
+            scen_text += f'00:00:{D}>TRAIL ON'
 
         # Add a newline at the end of the addtdwaypoints command
         scen_text += '\n'
