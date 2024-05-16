@@ -14,8 +14,9 @@ def main(input_dir, sol_file, solutions_name = 'tbl_solutions'):
         routes = mFSTSPRoute(input_dir, sol)
         
         # Perform operations
-        routes.get_sorties()
         routes.construct_truckroute()
+        routes.get_deliveries()
+        routes.get_sorties()
         routes.construct_scenario(sol.split('.')[0] + '.scn')
 
 # if __name__ == "__main__":
