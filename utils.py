@@ -106,3 +106,11 @@ def simplify_graph(G, tol=0.0001, gpkg_file=False):
     G_mod = ox.graph_from_gdfs(gdf_nodes, gdf_edges_simplified)
 
     return G_mod
+
+def m2ft(m):
+    """Converts distance in meters to feet"""
+    return float(m) / 0.3048
+
+def ms2kts(ms):
+    """Converts speed in m/s to knots"""
+    return float(ms) * 1.94384449 

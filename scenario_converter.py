@@ -5,10 +5,11 @@ import pandas as pd
 import osmnx as ox
 import numpy as np
 import taxicab as tc
+import re
 import matplotlib.pyplot as plt
 from shapely.geometry import LineString, MultiLineString
 from shapely.ops import linemerge, transform
-from utils import kwikqdrdist, plot_linestring, reverse_linestring, shift_circ_ls, simplify_graph
+from utils import kwikqdrdist, plot_linestring, reverse_linestring, shift_circ_ls, simplify_graph, m2ft, ms2kts
 
 class mFSTSPRoute:
     def __init__(self, input_dir, sol_file):
@@ -51,6 +52,22 @@ class mFSTSPRoute:
         self.G = ox.graph_from_bbox(bbox=lims, network_type='drive')
         # Simplify the graph using osmnx
         self.G = simplify_graph(self.G)
+
+        self.get_vehicle_data(input_dir, sol_file)
+
+    def get_vehicle_data(self, input_dir, sol_file):
+        """Load the vehicle data that corresponds with the solution file
+        args: type, description
+        - input_dir: str, input directory/ path of the problem
+        - sol_file: str, filename of the to be converted solution"""
+
+        # Load vehicle data from CSV
+        vehicle_group = re.search(r'\d+', sol_file).group()
+        self.vehicle_data = pd.read_csv(input_dir.rsplit('/', 1)[0] + '/' + f"tbl_vehicles_{vehicle_group}.csv")
+        # Set the correct row as column names
+        self.vehicle_data.columns = self.vehicle_data.iloc[0]
+        # Drop the column that has been set as column names
+        self.vehicle_data = self.vehicle_data.drop(self.vehicle_data.index[0]) 
 
     def get_map_lims(self, margin, unit='km'):
         """Function to get map limits where all customers fit in.
@@ -198,7 +215,10 @@ class mFSTSPRoute:
         rendezvouss.loc[:, 'endNode'] = rendezvouss['endNode'].astype(int)
         # Convert rendezvouss to dictionary for quicker lookup
         rendezvouss_dict = {int(row['startNode']): int(row['endNode']) for index, row in rendezvouss.iterrows()}
-        self.trips = []
+        self.trips = {}
+        self.UAVs = sorties['vehicleID'].unique()
+        for UAV in self.UAVs:
+            self.trips[UAV] = []
 
         # Process sorties
         for index, sortie in sorties.iterrows():
@@ -208,7 +228,7 @@ class mFSTSPRoute:
             # Check if j is in rendezvouss_dict
             if j in rendezvouss_dict:
                 k = rendezvouss_dict[j]
-                self.trips.append((i, j, k))
+                self.trips[sortie['vehicleID']].append((i, j, k))
             else:
                 raise ValueError(f"No corresponding rendezvous found for endNode {j} starting from node {i}")
     
@@ -219,7 +239,7 @@ class mFSTSPRoute:
         self.truckdeliveries = self.truckactivities[self.truckactivities['Status']==' Making Delivery ']
         self.delivery_nodes = self.truckdeliveries['startNode'].str.strip().astype(int).tolist()
 
-    def construct_scenario(self, save_name, sorties=False):
+    def construct_scenario(self, save_name):
         route_waypoints = self.route_waypoints
         route_lats = self.route_lats
         route_lons = self.route_lons
@@ -248,7 +268,8 @@ class mFSTSPRoute:
         turns.append(True)
 
         # Add some commands to pan to the correct location and zoom in, and use the modified active wp package.
-        self.scen_text = "00:00:00>IMPL ACTIVEWAYPOINT TDActWp"
+        self.scen_text = "00:00:00>IMPL ACTIVEWAYPOINT TDActWp\n"
+        self.scen_text += "00:00:00>IMPL AUTOPILOT TDAutoPilot\n"
         self.scen_text += f'00:00:00>PAN {route_lats[0]} {route_lons[0]}\n' # Pan to the origin
         self.scen_text += '00:00:00>ZOOM 50\n\n' # Zoom in
 
@@ -296,7 +317,8 @@ class mFSTSPRoute:
         # Add delivery commands
         self.delivery_scen(trkid)
         # Add sortie commands
-        self.sortie_scen(trkid)
+        for UAV in self.UAVs:
+            self.sortie_scen(trkid, UAV)
         self.scen_text += '\n'
         # Check whether depot is an operation point. If so, delay the LNAV and VNAV
         # LNAV and VNAV will cause the truck to start moving before the operation has taken place
@@ -314,7 +336,7 @@ class mFSTSPRoute:
         # Delete truck at route end
         # It is considered it arrived if it is within 3 metres of the destination, converted to nautical miles.
         destination_tolerance = 3/1852 
-        self.scen_text += f'00:{"{:02}".format((j * self.scn_lim + i)//200)}:00>{trkid} ATDIST {route_lats[-1]} {route_lons[-1]} {destination_tolerance} TRKDEL {trkid}\n'
+        self.scen_text += f'00:{"{:02}".format((j * self.scn_lim + i)//100)}:00>{trkid} ATDIST {route_lats[-1]} {route_lons[-1]} {destination_tolerance} TRKDEL {trkid}\n'
 
         # Change directory to scenario folder
         try:
@@ -327,17 +349,21 @@ class mFSTSPRoute:
             f.write(self.scen_text)
 
     def delivery_scen(self, trkid):
+        specs = self.vehicle_data[self.vehicle_data['% vehicleID'] == '1']
         for node in self.delivery_nodes:
             self.scen_text += f"\n00:00:00>ADDOPERATIONPOINTS {trkid} {self.customers.loc[node]['Route_lat']}/" + \
-                            f"{self.customers.loc[node]['Route_lon']}, DELIVERY, 5"
+                            f"{self.customers.loc[node]['Route_lon']}, DELIVERY, {specs['serviceTime [sec]'].item()}"
 
-    def sortie_scen(self, trkid):
+    def sortie_scen(self, trkid, UAVnumber):
         """Function that writes the text of sorties on top of existing text. This should come after the waypoints have
         been added, otherwise the sorties will be added to the stack before the waypoints exist.
         args: type, description
-        - trkid: str, identifyer of the truck that will perform the operation"""
+        - trkid: str, identifyer of the truck that will perform the operation
+        - UAVnumber: str, identifyer of the UAV that will be dispatched"""
+        UAVtrips = self.trips[UAVnumber]
+        specs = self.vehicle_data[self.vehicle_data['% vehicleID'] == UAVnumber]
         for node in self.cust_nodes:
-            matching_trip = next((trip for trip in self.trips if trip[0] == node), None)
+            matching_trip = next((trip for trip in UAVtrips if trip[0] == node), None)
             if matching_trip:
                 i = matching_trip[0]
                 j = matching_trip[1]
@@ -346,5 +372,10 @@ class mFSTSPRoute:
                 j_lat = f"{self.customers.loc[j][' latDeg']}"
                 j_lon = f"{self.customers.loc[j][' lonDeg']}"
                 k_coords = f"{self.customers.loc[k]['Route_lat']}/{self.customers.loc[k]['Route_lon']}"
-                self.scen_text += f"\n00:00:00>ADDOPERATIONPOINTS {trkid}, {i_coords}, SORTIE, 5, M600, "
-                self.scen_text += f"{j_lat}, {j_lon}, {k_coords}, 100, 25"
+                # Truck is ID one so subtract 1 from UAV number
+                # Use data in specsheet to add the command to the stack
+                self.scen_text += f"\n00:00:00>ADDOPERATIONPOINTS {trkid}, {i_coords}, SORTIE, "+\
+                            f"{specs['launchTime [sec]'].item()}, M600, {int(UAVnumber) - 1}, {j_lat}, "+\
+                            f"{j_lon}, {k_coords}, {m2ft(specs['cruiseAlt [m]'].item())}, "+\
+                            f"{ms2kts(specs['cruiseSpeed [m/s]'].item())} {specs['serviceTime [sec]'].item()}, " +\
+                            f"{specs['recoveryTime [sec]'].item()}"
