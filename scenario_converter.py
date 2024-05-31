@@ -31,6 +31,9 @@ class mFSTSPRoute:
         # string space stripping
         solution.loc[:, 'vehicleType'] = solution['vehicleType'].str.strip()
         solution.loc[:, 'startTime'] = pd.to_numeric(solution['startTime'], errors='coerce')
+        solution.loc[:, 'endTime'] = pd.to_numeric(solution['endTime'], errors='coerce')
+        solution.loc[:, 'startNode'] = pd.to_numeric(solution['startNode'], errors='coerce')
+        solution.loc[:, 'endNode'] = pd.to_numeric(solution['endNode'], errors='coerce')
         # Store the data in the dictionary
         self.data['problemName'] = metadata['problemName'].iloc[0]
         self.data['numUAVs'] = int(metadata['numUAVs'].iloc[0]),
@@ -62,8 +65,8 @@ class mFSTSPRoute:
         - sol_file: str, filename of the to be converted solution"""
 
         # Load vehicle data from CSV
-        vehicle_group = re.search(r'\d+', sol_file).group()
-        self.vehicle_data = pd.read_csv(input_dir.rsplit('/', 1)[0] + '/' + f"tbl_vehicles_{vehicle_group}.csv")
+        self.vehicle_group = re.search(r'\d+', sol_file).group()
+        self.vehicle_data = pd.read_csv(input_dir.rsplit('/', 1)[0] + '/' + f"tbl_vehicles_{self.vehicle_group}.csv")
         # Set the correct row as column names
         self.vehicle_data.columns = self.vehicle_data.iloc[0]
         # Drop the column that has been set as column names
@@ -115,9 +118,10 @@ class mFSTSPRoute:
         # Should already be sorted, redundancy
         self.truckactivities = self.truckactivities.sort_values('startTime')
         # Get all traveling activities
-        truckdriving = self.truckactivities[self.truckactivities['Description'].str.startswith(' Travel from node')]
+        self.truckdriving = self.truckactivities[self.truckactivities['Description'].str.startswith(\
+                                                                                    ' Travel from node')]
         # Extract node sequence from traveling activities
-        self.cust_nodes = truckdriving['Description'].str.extractall(r'(\d+)')
+        self.cust_nodes = self.truckdriving['Description'].str.extractall(r'(\d+)')
         self.cust_nodes = self.cust_nodes.astype(int)
         self.cust_nodes = self.cust_nodes[0].unique().tolist()
         route = None 
@@ -237,7 +241,7 @@ class mFSTSPRoute:
         Can be used to make a scenario text with it."""
 
         self.truckdeliveries = self.truckactivities[self.truckactivities['Status']==' Making Delivery ']
-        self.delivery_nodes = self.truckdeliveries['startNode'].str.strip().astype(int).tolist()
+        self.delivery_nodes = self.truckdeliveries['startNode'].tolist()
 
     def construct_scenario(self, save_name):
         route_waypoints = self.route_waypoints
@@ -245,7 +249,7 @@ class mFSTSPRoute:
         route_lons = self.route_lons
 
         i = 1 # Start at second waypoint
-        turns = [True] # Doesn't matter what the first waypoint is designated as, so just have it as true.
+        turns = ['turn'] # Doesn't matter what the first waypoint is designated as, so just have it as true.
         for lat_cur, lon_cur in route_waypoints[1:-1]:
             # Get the previous and the next waypoint
             lat_prev, lon_prev = route_waypoints[i-1]
@@ -257,19 +261,23 @@ class mFSTSPRoute:
             if angle>180:
                 angle=360-angle
             # In general, we noticed that we don't need to slow down if the turn is smaller than 25 degrees
+            # If the angle is larger, then a more severe slowdown is required
             #  However, this will depend on the cruise speed of the vehicle.
-            if angle > 25:
-                turns.append(True)
+            print(angle)
+            if angle > 35:
+                turns.append('sharpturn')
+            elif angle > 25:
+                turns.append('turn')
             else:
-                turns.append(False)
+                turns.append('straight')
             i += 1
 
         # Let the vehicle slow down for the depot
         turns.append(True)
-
         # Add some commands to pan to the correct location and zoom in, and use the modified active wp package.
         self.scen_text = "00:00:00>IMPL ACTIVEWAYPOINT TDActWp\n"
         self.scen_text += "00:00:00>IMPL AUTOPILOT TDAutoPilot\n"
+        self.scen_text += "00:00:00>IMPL ROUTE TDRoute\n"
         self.scen_text += f'00:00:00>PAN {route_lats[0]} {route_lons[0]}\n' # Pan to the origin
         self.scen_text += '00:00:00>ZOOM 50\n\n' # Zoom in
 
@@ -287,11 +295,11 @@ class mFSTSPRoute:
         # ADDTDWAYPOINTS can chain waypoint data in the following way:
         # ADDTDWAYPOINTS ACID LAT LON ALT SPD Turn? TurnSpeed
         # SPD here can be set as the cruise speed so the vehicle knows how fast to go
-        cruise_spd = 25 #kts
+        # cruise_spd = 25 #kts
         cruise_alt = acalt # Keep it constant throughout the flight
         # Turn speed of 5 kts usually works well
-        turn_spd = 5 #kts
-
+        turn_spd = 10 #kts
+        sharpturn_spd = 5 #kts
         # Initiate adddtwaypoints command
         self.scen_text += f'00:00:00>ADDTDWAYPOINTS {trkid}' # First add the root of the command
         # Loop through waypoints
@@ -301,10 +309,14 @@ class mFSTSPRoute:
         self.scn_lim = 400
         for wplat, wplon, turn in zip(route_lats, route_lons, turns):
             # Check if this waypoint is a turn
-            if turn:
+            if turn == 'turn' or turn == 'sharpturn':
                 wptype = 'TURNSPD'
+                wp_turnspd = turn_spd if turn == 'turn' else sharpturn_spd
             else:
                 wptype = 'FLYBY'
+                # Doesn't matter what we pick here, as long as it is assigned. 
+                # Will be ignored
+                wp_turnspd = turn_spd
             if i > self.scn_lim:
                 j += 1
                 self.scen_text += f'\n00:00:00>ADDTDWAYPOINTS {trkid}'
@@ -312,23 +324,23 @@ class mFSTSPRoute:
             i += 1
             # Add the text for this waypoint. It doesn't matter if we always add a turn speed, as BlueSky will
             # ignore it if the wptype is set as FLYBY
-            self.scen_text += f',{wplat},{wplon},{cruise_alt},{cruise_spd},{wptype},{turn_spd}'
+            self.scen_text += f',{wplat},{wplon},{cruise_alt},,{wptype},{wp_turnspd}'
 
         # Add delivery commands
         self.delivery_scen(trkid)
         # Add sortie commands
         for UAV in self.UAVs:
             self.sortie_scen(trkid, UAV)
+        self.add_truck_timing(trkid)
         self.scen_text += '\n'
         # Check whether depot is an operation point. If so, delay the LNAV and VNAV
         # LNAV and VNAV will cause the truck to start moving before the operation has taken place
-        D = "01" if 'ADDOPERATIONPOINTS TRUCK, ' + str(route_lats[0]) + '/' + str(route_lons[0]) \
-            in self.scen_text else "00"
-        # Enable vertical and horizontal navigation after first set of wps and operation points iteration
-        self.scen_text += f'00:00:{D}>LNAV {trkid} ON\n'
-        self.scen_text += f'00:00:{D}>VNAV {trkid} ON\n'
+        if 'ADDOPERATIONPOINTS TRUCK, ' + str(route_lats[0]) + '/' + str(route_lons[0]) not in self.scen_text:
+            # Enable vertical and horizontal navigation manually when first wp is not an operation
+            self.scen_text += f'00:00:00>LNAV {trkid} ON\n'
+            self.scen_text += f'00:00:00>VNAV {trkid} ON\n'
         # Turn trail on, tracing for testing
-        self.scen_text += f'00:00:{D}>TRAIL ON'
+        self.scen_text += f'00:00:00>TRAIL ON'
 
         # Add a newline at the end of the addtdwaypoints command
         self.scen_text += '\n'
@@ -361,6 +373,7 @@ class mFSTSPRoute:
         - trkid: str, identifyer of the truck that will perform the operation
         - UAVnumber: str, identifyer of the UAV that will be dispatched"""
         UAVtrips = self.trips[UAVnumber]
+        UAV_type = f'M{self.vehicle_group}'
         specs = self.vehicle_data[self.vehicle_data['% vehicleID'] == UAVnumber]
         for node in self.cust_nodes:
             matching_trip = next((trip for trip in UAVtrips if trip[0] == node), None)
@@ -375,7 +388,20 @@ class mFSTSPRoute:
                 # Truck is ID one so subtract 1 from UAV number
                 # Use data in specsheet to add the command to the stack
                 self.scen_text += f"\n00:00:00>ADDOPERATIONPOINTS {trkid}, {i_coords}, SORTIE, "+\
-                            f"{specs['launchTime [sec]'].item()}, M600, {int(UAVnumber) - 1}, {j_lat}, "+\
+                            f"{specs['launchTime [sec]'].item()}, {UAV_type}, {int(UAVnumber) - 1}, {j_lat}, "+\
                             f"{j_lon}, {k_coords}, {m2ft(specs['cruiseAlt [m]'].item())}, "+\
                             f"{ms2kts(specs['cruiseSpeed [m/s]'].item())} {specs['serviceTime [sec]'].item()}, " +\
                             f"{specs['recoveryTime [sec]'].item()}"
+
+    def add_truck_timing(self, trkid):
+        self.scen_text += f'\n00:00:00>TDRTAs {trkid}'
+        cust_idx = 1
+        for truckwp in self.cust_nodes:
+            if truckwp == 0:
+                continue
+            target_custtime = self.truckdriving[self.truckdriving['endNode'] == truckwp]['endTime'].values[0]
+            lat = self.customers.loc[self.cust_nodes[cust_idx]]['Route_lat']
+            lon = self.customers.loc[self.cust_nodes[cust_idx]]['Route_lon']
+
+            self.scen_text += f", {lat}/{lon},{target_custtime}"
+            cust_idx += 1
