@@ -1,6 +1,5 @@
 import os
 import geopy.distance
-import math
 import pandas as pd
 import osmnx as ox
 import numpy as np
@@ -9,7 +8,8 @@ import re
 import matplotlib.pyplot as plt
 from shapely.geometry import LineString, MultiLineString
 from shapely.ops import linemerge, transform
-from utils import kwikqdrdist, plot_linestring, reverse_linestring, shift_circ_ls, simplify_graph, m2ft, ms2kts
+from utils import kwikqdrdist, plot_linestring, reverse_linestring, \
+                shift_circ_ls, simplify_graph, m2ft, ms2kts, get_map_lims
 
 class mFSTSPRoute:
     def __init__(self, input_dir, sol_file):
@@ -43,19 +43,21 @@ class mFSTSPRoute:
 
         # Load customer locations
         self.customers = pd.read_csv(input_dir + '/tbl_locations.csv')
+        self.customers.columns = self.customers.columns.str.strip()
         # Create return depot node (equal to first node (= depot))
         self.customers = pd.concat([self.customers, self.customers.iloc[[0]]], ignore_index=True)
         self.depot_return_id = self.customers.index[-1]
         # Give correct index to this node
         self.customers.at[self.depot_return_id, '% nodeID'] = self.depot_return_id
 
+        customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
         # 4 km border for the map is sufficient
-        lims = self.get_map_lims(4)
+        lims = get_map_lims(customer_latlons, 4)
         # Adjusted box sizes to include the entire map
         self.G = ox.graph_from_bbox(bbox=lims, network_type='drive')
         # Simplify the graph using osmnx
         self.G = simplify_graph(self.G)
-
+        # Retreive vehicle data from input and sol file
         self.get_vehicle_data(input_dir, sol_file)
 
     def get_vehicle_data(self, input_dir, sol_file):
@@ -71,46 +73,6 @@ class mFSTSPRoute:
         self.vehicle_data.columns = self.vehicle_data.iloc[0]
         # Drop the column that has been set as column names
         self.vehicle_data = self.vehicle_data.drop(self.vehicle_data.index[0]) 
-
-    def get_map_lims(self, margin, unit='km'):
-        """Function to get map limits where all customers fit in.
-        Args: type, description
-        margin: float or int, margin for borders of the map
-        unit: string, unit for provided margin"""
-        
-        # Conversion factors
-        unit_conversion = {
-            'km': 1,
-            'm': 1 / 1000,             # 1000 meters in a kilometer
-            'mi': 1.60934,             # 1 mile is approximately 1.60934 kilometers
-            'nm': 1.852                # 1 nautical mile is approximately 1.852 kilometers
-        }
-
-        # Convert margin to kilometers
-        if unit in unit_conversion:
-            margin_km = margin * unit_conversion[unit]
-        else:
-            raise ValueError(f"Unsupported unit: {unit}. Use 'km', 'm', 'mi', or 'nm'.")
-
-        # Get the max and min latitudes and longitudes
-        latmax = self.customers[' latDeg'].max()
-        latmin = self.customers[' latDeg'].min()
-        lonmax = self.customers[' lonDeg'].max()
-        lonmin = self.customers[' lonDeg'].min()
-
-        # Convert margin from km to degrees
-        lat_margin_deg = margin_km / 111.32  # 1 degree latitude is approximately 111.32 km
-        avg_lat = (latmax + latmin) / 2
-        lon_margin_deg = margin_km / (111.32 * math.cos(math.radians(avg_lat)))  # Adjust longitude margin by latitude
-
-        # Calculate the new limits
-        box_latmax = latmax + lat_margin_deg
-        box_latmin = latmin - lat_margin_deg
-        box_lonmax = lonmax + lon_margin_deg
-        box_lonmin = lonmin - lon_margin_deg
-
-        # Return the coordinates as a tuple
-        return (box_latmax, box_latmin, box_lonmax, box_lonmin)
 
     def construct_truckroute(self):
         # Extract all truck route nodes
@@ -137,10 +99,10 @@ class mFSTSPRoute:
             # ____ figure out if this uses distance (length) of edges.
             # ____ find out about one way streets! does taxicab take this into account?
             # ____ if it's time, need for additional extra step. Time to cross edge. new weights. use that as new weight
-            routepart = tc.distance.shortest_path(self.G,   (self.customers.iloc[U][' latDeg'], 
-                                                        self.customers.iloc[U][' lonDeg']), 
-                                                        (self.customers.iloc[V][' latDeg'], 
-                                                        self.customers.iloc[V][' lonDeg']))
+            routepart = tc.distance.shortest_path(self.G,   (self.customers.iloc[U]['latDeg'], 
+                                                        self.customers.iloc[U]['lonDeg']), 
+                                                        (self.customers.iloc[V]['latDeg'], 
+                                                        self.customers.iloc[V]['lonDeg']))
             
             # Use the nodes to extract all edges u, v of graph G that the vehicle completely traverses
             routepart_edges = zip(routepart[1][:-1], routepart[1][1:])
@@ -263,7 +225,6 @@ class mFSTSPRoute:
             # In general, we noticed that we don't need to slow down if the turn is smaller than 25 degrees
             # If the angle is larger, then a more severe slowdown is required
             #  However, this will depend on the cruise speed of the vehicle.
-            print(angle)
             if angle > 35:
                 turns.append('sharpturn')
             elif angle > 25:
@@ -382,8 +343,8 @@ class mFSTSPRoute:
                 j = matching_trip[1]
                 k = matching_trip[2]
                 i_coords = f"{self.customers.loc[i]['Route_lat']}/{self.customers.loc[i]['Route_lon']}"
-                j_lat = f"{self.customers.loc[j][' latDeg']}"
-                j_lon = f"{self.customers.loc[j][' lonDeg']}"
+                j_lat = f"{self.customers.loc[j]['latDeg']}"
+                j_lon = f"{self.customers.loc[j]['lonDeg']}"
                 k_coords = f"{self.customers.loc[k]['Route_lat']}/{self.customers.loc[k]['Route_lon']}"
                 # Truck is ID one so subtract 1 from UAV number
                 # Use data in specsheet to add the command to the stack

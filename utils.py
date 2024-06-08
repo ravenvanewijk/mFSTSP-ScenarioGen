@@ -2,6 +2,7 @@ import osmnx as ox
 import networkx as nx
 import geopandas as gpd
 import numpy as np
+import math
 from shapely.geometry import LineString
 from shapely.ops import linemerge
 
@@ -106,6 +107,50 @@ def simplify_graph(G, tol=0.0001, gpkg_file=False):
     G_mod = ox.graph_from_gdfs(gdf_nodes, gdf_edges_simplified)
 
     return G_mod
+
+def get_map_lims(customer_locs, margin, unit='km'):
+    """Function to get map limits where all customers fit in.
+    Args: type, description
+    margin: float or int, margin for borders of the map
+    unit: string, unit for provided margin"""
+    
+    # Conversion factors
+    unit_conversion = {
+        'km': 1,
+        'm': 1 / 1000,             # 1000 meters in a kilometer
+        'mi': 1.60934,             # 1 mile is approximately 1.60934 kilometers
+        'nm': 1.852                # 1 nautical mile is approximately 1.852 kilometers
+    }
+
+    # Convert margin to kilometers
+    if unit in unit_conversion:
+        margin_km = margin * unit_conversion[unit]
+    else:
+        raise ValueError(f"Unsupported unit: {unit}. Use 'km', 'm', 'mi', or 'nm'.")
+
+    # Extract latitudes and longitudes into separate lists
+    latitudes = [loc[0] for loc in customer_locs]
+    longitudes = [loc[1] for loc in customer_locs]
+
+    # Find the maximum and minimum values
+    latmax = max(latitudes)
+    latmin = min(latitudes)
+    lonmax = max(longitudes)
+    lonmin = min(longitudes)
+
+    # Convert margin from km to degrees
+    lat_margin_deg = margin_km / 111.32  # 1 degree latitude is approximately 111.32 km
+    avg_lat = (latmax + latmin) / 2
+    lon_margin_deg = margin_km / (111.32 * math.cos(math.radians(avg_lat)))  # Adjust longitude margin by latitude
+
+    # Calculate the new limits
+    box_latmax = latmax + lat_margin_deg
+    box_latmin = latmin - lat_margin_deg
+    box_lonmax = lonmax + lon_margin_deg
+    box_lonmin = lonmin - lon_margin_deg
+
+    # Return the coordinates as a tuple
+    return (box_latmax, box_latmin, box_lonmax, box_lonmin)
 
 def m2ft(m):
     """Converts distance in meters to feet"""
