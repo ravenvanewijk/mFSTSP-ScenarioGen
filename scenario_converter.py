@@ -109,35 +109,50 @@ class mFSTSPRoute:
 
             # routepart at beginning
             custroute.append(routepart[2])
-            # For every pair of edges, append the route with the Shapely LineStrings
-            for u, v in routepart_edges:
-                # Some edges have this attribute embedded, when geometry is curved
-                if 'geometry' in self.G.edges[(u, v, 0)]:
-                    custroute.append(self.G.edges[(u, v, 0)]['geometry'])
-                # Other edges don't have this attribute. These are straight lines between their two nodes.
-                else:
-                    # So, get a straight line between the nodes and append that line piece
-                    custroute.append(LineString([(self.G.nodes[u]['x'], self.G.nodes[u]['y']), 
-                                            (self.G.nodes[v]['x'], self.G.nodes[v]['y'])]))
-                    
-            # Additional check for first linepart directionality. Sometimes it might be facing the wrong way.
-            # The end of the beginning (incomplete) linestring should match
-            if not custroute[1].coords[0] == routepart[2].coords[-1]:
-                # Check if flipped version does align
-                if custroute[1].coords[0] == routepart[2].coords[0]:
-                    custroute[0] = reverse_linestring(custroute[0])
-                else:
-                    raise Exception('Taxicab alignment Error: Coordinates of beginning LineString does not align')
+            try:
+                # For every pair of edges, append the route with the Shapely LineStrings
+                for u, v in routepart_edges:
+                    # Some edges have this attribute embedded, when geometry is curved
+                    if 'geometry' in self.G.edges[(u, v, 0)]:
+                        custroute.append(self.G.edges[(u, v, 0)]['geometry'])
+                    # Other edges don't have this attribute. These are straight lines between their two nodes.
+                    else:
+                        # So, get a straight line between the nodes and append that line piece
+                        custroute.append(LineString([(self.G.nodes[u]['x'], self.G.nodes[u]['y']), 
+                                                (self.G.nodes[v]['x'], self.G.nodes[v]['y'])]))
+            except IndexError:
+                pass
+            
+            try:
+                # Additional check for first linepart directionality. Sometimes it might be facing the wrong way.
+                # The end of the beginning (incomplete) linestring should match
+                try:
+                    if not custroute[1].coords[0] == routepart[2].coords[-1]:
+                        # Check if flipped version does align
+                        if custroute[1].coords[0] == routepart[2].coords[0]:
+                            custroute[0] = reverse_linestring(custroute[0])
+                        else:
+                            raise Exception('Taxicab alignment Error: Coordinates of beginning LineString does not align')
+                except IndexError:
+                    pass
+            except AttributeError:
+                pass
 
-            # Check whether final incomplete linestring is in proper direction, similar check
-            if not custroute[-1].coords[-1] == routepart[3].coords[0]:
-                # Check if flipped version does align
-                if custroute[-1].coords[-1] == routepart[3].coords[-1]:
-                    custroute.append(reverse_linestring(routepart[3]))
-                else:
-                    raise Exception('Taxicab alignment Error: Coordinates of final LineString does not align')
-            else:
-                custroute.append(routepart[3])
+            try:
+                # Check whether final incomplete linestring is in proper direction, similar check
+                try:
+                    if not custroute[-1].coords[-1] == routepart[3].coords[0]:
+                        # Check if flipped version does align
+                        if custroute[-1].coords[-1] == routepart[3].coords[-1]:
+                            custroute.append(reverse_linestring(routepart[3]))
+                        else:
+                            raise Exception('Taxicab alignment Error: Coordinates of final LineString does not align')
+                    else:
+                        custroute.append(routepart[3])
+                except IndexError:
+                    pass
+            except AttributeError:
+                pass
             # for ls in custroute:
             #     plot_linestring(ls)
             # add customer route total global route
