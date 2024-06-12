@@ -21,7 +21,7 @@ def main(input_dir, sol_file, solutions_name = 'tbl_solutions'):
         routes.construct_scenario(sol.split('.')[0] + '.scn')
 
         react = ReactiveScenario(input_dir, sol)
-        react.construct_scenario(sol.split('.')[0] + 'reactive.scn')
+        react.construct_scenario(sol.split('.')[0] + '_reactive.scn')
 
 # if __name__ == "__main__":
 #     # Set up argument parser

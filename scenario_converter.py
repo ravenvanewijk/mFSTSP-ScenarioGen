@@ -13,12 +13,14 @@ from utils import kwikqdrdist, plot_linestring, reverse_linestring, \
 
 class mFSTSPRoute:
     def __init__(self, input_dir, sol_file):
+        self.input_dir = input_dir
+        self.sol_file = sol_file
         self.route_waypoints = {}
         self.route_lats = {}
         self.route_lons = {}
         self.data = {}
         # extract all data from solution file
-        data = pd.read_csv(input_dir + '/' + sol_file)
+        data = pd.read_csv(self.input_dir + '/' + self.sol_file)
         # metadata is first few lines
         metadata = data.head(3)
         # strip all spaces
@@ -42,7 +44,7 @@ class mFSTSPRoute:
         self.data['solution'] = solution
 
         # Load customer locations
-        self.customers = pd.read_csv(input_dir + '/tbl_locations.csv')
+        self.customers = pd.read_csv(self.input_dir + '/tbl_locations.csv')
         self.customers.columns = self.customers.columns.str.strip()
         # Create return depot node (equal to first node (= depot))
         self.customers = pd.concat([self.customers, self.customers.iloc[[0]]], ignore_index=True)
@@ -58,17 +60,13 @@ class mFSTSPRoute:
         # Simplify the graph using osmnx
         self.G = simplify_graph(self.G)
         # Retreive vehicle data from input and sol file
-        self.get_vehicle_data(input_dir, sol_file)
+        self.get_vehicle_data()
 
-    def get_vehicle_data(self, input_dir, sol_file):
-        """Load the vehicle data that corresponds with the solution file
-        args: type, description
-        - input_dir: str, input directory/ path of the problem
-        - sol_file: str, filename of the to be converted solution"""
-
+    def get_vehicle_data(self):
+        """Load the vehicle data that corresponds with the solution file"""
         # Load vehicle data from CSV
-        self.vehicle_group = re.search(r'\d+', sol_file).group()
-        self.vehicle_data = pd.read_csv(input_dir.rsplit('/', 1)[0] + '/' + f"tbl_vehicles_{self.vehicle_group}.csv")
+        self.vehicle_group = re.search(r'\d+', self.sol_file).group()
+        self.vehicle_data = pd.read_csv(self.input_dir.rsplit('/', 1)[0] + '/' + f"tbl_vehicles_{self.vehicle_group}.csv")
         # Set the correct row as column names
         self.vehicle_data.columns = self.vehicle_data.iloc[0]
         # Drop the column that has been set as column names
@@ -91,14 +89,10 @@ class mFSTSPRoute:
         cust_pairs = zip(self.cust_nodes[:-1], self.cust_nodes[1:])
 
         for U, V in cust_pairs:
-            print(U,V)
             custroute = []
             # Now use the taxicab package to find the shortest path between 2 customer nodes.
             # Args come in this order: 0: distance, 1: nodes 2: unfinished linepart begin 3: unfinished linepart end
             # Look up location of customer nodes U and V in the custnode df
-            # ____ figure out if this uses distance (length) of edges.
-            # ____ find out about one way streets! does taxicab take this into account?
-            # ____ if it's time, need for additional extra step. Time to cross edge. new weights. use that as new weight
             routepart = tc.distance.shortest_path(self.G,   (self.customers.iloc[U]['latDeg'], 
                                                         self.customers.iloc[U]['lonDeg']), 
                                                         (self.customers.iloc[V]['latDeg'], 
@@ -255,7 +249,8 @@ class mFSTSPRoute:
         self.scen_text += "00:00:00>IMPL AUTOPILOT TDAutoPilot\n"
         self.scen_text += "00:00:00>IMPL ROUTE TDRoute\n"
         self.scen_text += f'00:00:00>PAN {route_lats[0]} {route_lons[0]}\n' # Pan to the origin
-        self.scen_text += '00:00:00>ZOOM 50\n\n' # Zoom in
+        self.scen_text += "00:00:00>ZOOM 50\n" # Zoom in
+        self.scen_text += f"00:00:00>LOG {self.input_dir.split('/')[-1]} {self.sol_file}\n"
 
         # Get angle of first direction to ensure correct orientation
         achdg, _ = kwikqdrdist(route_lats[0], route_lons[0], route_lats[1], route_lons[1])
