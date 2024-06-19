@@ -24,11 +24,17 @@ class ReactiveScenario:
         self.vehicle_data = self.vehicle_data.drop(self.vehicle_data.index[0])
 
     def construct_scenario(self, save_name):
+        # Load all necessary implementations
         self.scen_text = "00:00:00>IMPL ACTIVEWAYPOINT TDActWp\n"
         self.scen_text += "00:00:00>IMPL AUTOPILOT TDAutoPilot\n"
         self.scen_text += "00:00:00>IMPL ROUTE TDRoute\n"
+        # Initiate logging with correct args to track results
         self.scen_text += f"00:00:00>LOG {self.input_dir.split('/')[-1]} {self.sol_file}\n"
-        self.scen_text += f"00:00:00>REACT {self.vehicle_group}"
+        # Add load timing command such that RTAs can be formulated based on this data
+        self.scen_text += f"00:00:00>LOADTIMING {self.input_dir} tbl_truck_travel_data_PG.csv\n"
+        # Extract the number of drones from the sol_file name
+        M = re.search(r'_[0-9]+_([0-9]+)_', self.sol_file)[1]
+        self.scen_text += f"00:00:00>REACT {self.vehicle_group} {M}\n"
         for index, customer in self.customers.iterrows():
             self.scen_text += f",{customer['latDeg']},{customer['lonDeg']},{customer['parcelWtLbs']}"
 

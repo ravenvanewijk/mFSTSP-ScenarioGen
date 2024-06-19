@@ -7,7 +7,7 @@ import taxicab as tc
 import re
 import matplotlib.pyplot as plt
 from shapely.geometry import LineString, MultiLineString
-from shapely.ops import linemerge, transform
+from shapely.ops import linemerge
 from utils import kwikqdrdist, plot_linestring, reverse_linestring, \
                 shift_circ_ls, simplify_graph, m2ft, ms2kts, get_map_lims
 
@@ -261,6 +261,7 @@ class mFSTSPRoute:
         acalt = 0 # ft, ground altitude
         acspd = 0 # start with 0 speed from depot
         self.scen_text += f'00:00:00>CRE {trkid} {actype} {route_lats[0]} {route_lons[0]} {achdg} {acalt} {acspd}\n'
+        self.scen_text += f'00:00:00>COLOUR {trkid} RED'
 
         # After creating it, we want to add all the waypoints. We can do that using the ADDTDWAYPOINTS command.
         # ADDTDWAYPOINTS can chain waypoint data in the following way:

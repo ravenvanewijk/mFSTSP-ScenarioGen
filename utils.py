@@ -159,3 +159,7 @@ def m2ft(m):
 def ms2kts(ms):
     """Converts speed in m/s to knots"""
     return float(ms) * 1.94384449 
+
+def mph2kts(mph):
+    """Converts speed in mph to knots"""
+    return float(mph) * 0.868976242
