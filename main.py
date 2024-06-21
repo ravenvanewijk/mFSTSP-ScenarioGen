@@ -2,8 +2,11 @@ from scenario_converter import mFSTSPRoute
 from reactive_scn_converter import ReactiveScenario
 import argparse
 import os
+import osmnx as ox
 
 def main(input_dir, sol_file, solutions_name = 'tbl_solutions'):
+    # disable caching, reduce clutter
+    ox.config(use_cache=False)  
 
     if sol_file.upper() == 'ALL':
         files = os.listdir(input_dir)

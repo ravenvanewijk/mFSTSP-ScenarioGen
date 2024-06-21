@@ -3,12 +3,12 @@ import pandas as pd
 import osmnx as ox
 import re
 import roadroute_lib as rr
+import graph_gen as gg
 from shapely.geometry import MultiLineString
 from shapely.ops import linemerge
-from utils import kwikqdrdist, shift_circ_ls, m2ft, ms2kts, spdlim_ox2bs,\
-                    get_city_from_bbox, CityNotFoundError, str_interpret
+from utils import kwikqdrdist, shift_circ_ls, m2ft, ms2kts, get_map_lims,\
+                    str_interpret
 
-from graph_ops import add_missing_spd, simplify_graph, get_map_lims
 
 class mFSTSPRoute:
     def __init__(self, input_dir, sol_file):
@@ -58,8 +58,8 @@ class mFSTSPRoute:
         # 4 km border for the map is sufficient
         lims = get_map_lims(customer_latlons, 4)
         try:
-            self.city = get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
-        except CityNotFoundError:
+            self.city = gg.get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
+        except gg.utils.CityNotFoundError:
             print("Customers are in an unknown location")
 
         # Change directory to graph folder
@@ -67,7 +67,7 @@ class mFSTSPRoute:
             graphfolder = '/graphs'
             os.chdir(os.getcwd() + graphfolder)
         except:
-            raise Exception('Scenario folder not found')
+            raise Exception('Graphs folder not found')
         
         if f'{self.city}.graphml' in os.listdir():
             # Graph already exists, use that one
@@ -75,13 +75,7 @@ class mFSTSPRoute:
                                     edge_dtypes={'osmid': str_interpret,
                                                 'reversed': str_interpret})
         else:
-            # Adjusted box sizes to include the entire map
-            self.G = ox.graph_from_bbox(bbox=lims, network_type='drive')
-            # Simplify the graph using osmnx
-            self.G = simplify_graph(self.G)
-            # Add missing speeds
-            self.G = add_missing_spd(self.G)
-            ox.save_graphml(self.G, f'{self.city}.graphml')
+            gg.generate_graph(lims[0], lims[1], lims[2], lims[3])
 
         os.chdir(os.getcwd().rsplit(graphfolder, 1)[0])
 
@@ -268,7 +262,7 @@ class mFSTSPRoute:
                 self.scen_text += f'\n00:00:00>ADDTDWAYPOINTS {trkid}'
                 i = 0
             i += 1
-            cruisespd = spdlim_ox2bs(spdlim)
+            cruisespd = spdlim
             # Add the text for this waypoint. It doesn't matter if we always add a turn speed, as BlueSky will
             # ignore it if the wptype is set as FLYBY
             self.scen_text += f',{wplat},{wplon},{cruise_alt},{cruisespd},{wptype},{wp_turnspd}'

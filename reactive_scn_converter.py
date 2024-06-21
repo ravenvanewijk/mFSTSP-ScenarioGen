@@ -1,8 +1,8 @@
 import re
 import os
 import pandas as pd
-from graph_ops import get_map_lims
-from utils import get_city_from_bbox, CityNotFoundError
+import graph_gen as gg
+from utils import get_map_lims
 
 class ReactiveScenario:
 
@@ -19,8 +19,8 @@ class ReactiveScenario:
         # 4 km border for the map is sufficient
         lims = get_map_lims(customer_latlons, 4)
         try:
-            self.city = get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
-        except CityNotFoundError:
+            self.city = gg.get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
+        except gg.CityNotFoundError:
             print("Customers are in an unknown location")
 
     def get_vehicle_data(self):
