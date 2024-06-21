@@ -1,11 +1,50 @@
-import osmnx as ox
-import networkx as nx
-import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
-import math
 from shapely.geometry import LineString
 from shapely.ops import linemerge
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 
+
+class CityNotFoundError(Exception):
+    """Custom exception for cases where the city cannot be found."""
+    pass
+
+def get_city_from_bbox(north, south, east, west):
+    """
+    Get the city name based on the bounding box limits.
+
+    Parameters:
+    north (float): Northern latitude of the bounding box.
+    south (float): Southern latitude of the bounding box.
+    east (float): Eastern longitude of the bounding box.
+    west (float): Western longitude of the bounding box.
+
+    Returns:
+    str: The name of the city.
+
+    Raises:
+    Exception: If the city cannot be determined.
+    """
+    geolocator = Nominatim(user_agent="my_geopy_application")
+    
+    # Calculate the center point of the bounding box
+    center_lat = (north + south) / 2
+    center_lon = (east + west) / 2
+
+    try:
+        # Reverse geocode using the center point of the bounding box
+        location = geolocator.reverse((center_lat, center_lon), exactly_one=True)
+    except (GeocoderTimedOut, GeocoderServiceError) as e:
+        raise Exception(f"Geocoding service error: {e}")
+
+    if location and location.raw:
+        address = location.raw.get('address', {})
+        city = address.get('city') or address.get('town') or address.get('village') or address.get('county')
+        if city:
+            return city
+    
+    raise CityNotFoundError("City could not be determined from the bounding box limits.")
 
 def kwikqdrdist(lata, lona, latb, lonb):
     """Gives quick and dirty qdr[deg] and dist [m]
@@ -69,88 +108,8 @@ def shift_circ_ls(line, adjustment=(1e-9, 1e-9)):
     # Create a new LineString with modified coordinates
     return LineString(coords)
 
-def simplify_graph(G, tol=0.0001, gpkg_file=False):
-    """
-    Simplify the geometries of the edges in the GeoDataFrame.
-    
-    Args:
-    - G: GeoDataFrame containing the edges to be simplified
-    - tol: float, the simplification tolerance
-    
-    Returns:
-    - GeoDataFrame with simplified geometries (edges)
-    """
-    # Convert the graph to GeoDataFrames
-    gdf_nodes, gdf_edges = ox.graph_to_gdfs(G)
-    
-
-    # Identify and handle list-type fields
-    list_type_columns = [col for col in gdf_edges.columns if gdf_edges[col].apply(lambda x: isinstance(x, list)).any()]
-    # Convert list-type columns to strings
-    for col in list_type_columns:
-        gdf_edges[col] = gdf_edges[col].apply(lambda x: ','.join(map(str, x)) if isinstance(x, list) else x)
-
-    gdf_edges_simplified = gdf_edges.copy()
-    simplified_geometries = gdf_edges_simplified['geometry'].apply(lambda geom: geom.simplify(tol, \
-                                                                                                preserve_topology=True))
-    gdf_edges_simplified['geometry'] = simplified_geometries
-    
-    if gpkg_file:
-        # Save the edges and nodes to a gpkg file for closer inspection on the simplifcation.
-        # This has already been performed for tol=0.0001 (default), which gives accurate results but also faster 
-        # processing of scenarios and simulation
-        gdf_edges.to_file("graph_comparison.gpkg", layer='original_edges', driver="GPKG")
-        gdf_edges_simplified.to_file("graph_comparison.gpkg", layer=f'edges {tol}', driver="GPKG")
-        gdf_nodes.to_file("graph_comparison.gpkg", layer='nodes', driver="GPKG")
-
-    # Convert back to an OSMNX graph
-    G_mod = ox.graph_from_gdfs(gdf_nodes, gdf_edges_simplified)
-
-    return G_mod
-
-def get_map_lims(customer_locs, margin, unit='km'):
-    """Function to get map limits where all customers fit in.
-    Args: type, description
-    margin: float or int, margin for borders of the map
-    unit: string, unit for provided margin"""
-    
-    # Conversion factors
-    unit_conversion = {
-        'km': 1,
-        'm': 1 / 1000,             # 1000 meters in a kilometer
-        'mi': 1.60934,             # 1 mile is approximately 1.60934 kilometers
-        'nm': 1.852                # 1 nautical mile is approximately 1.852 kilometers
-    }
-
-    # Convert margin to kilometers
-    if unit in unit_conversion:
-        margin_km = margin * unit_conversion[unit]
-    else:
-        raise ValueError(f"Unsupported unit: {unit}. Use 'km', 'm', 'mi', or 'nm'.")
-
-    # Extract latitudes and longitudes into separate lists
-    latitudes = [loc[0] for loc in customer_locs]
-    longitudes = [loc[1] for loc in customer_locs]
-
-    # Find the maximum and minimum values
-    latmax = max(latitudes)
-    latmin = min(latitudes)
-    lonmax = max(longitudes)
-    lonmin = min(longitudes)
-
-    # Convert margin from km to degrees
-    lat_margin_deg = margin_km / 111.32  # 1 degree latitude is approximately 111.32 km
-    avg_lat = (latmax + latmin) / 2
-    lon_margin_deg = margin_km / (111.32 * math.cos(math.radians(avg_lat)))  # Adjust longitude margin by latitude
-
-    # Calculate the new limits
-    box_latmax = latmax + lat_margin_deg
-    box_latmin = latmin - lat_margin_deg
-    box_lonmax = lonmax + lon_margin_deg
-    box_lonmin = lonmin - lon_margin_deg
-
-    # Return the coordinates as a tuple
-    return (box_latmax, box_latmin, box_lonmax, box_lonmin)
+def str_interpret(value):
+    return value  # Ensure the value remains a string
 
 def m2ft(m):
     """Converts distance in meters to feet"""
@@ -163,3 +122,18 @@ def ms2kts(ms):
 def mph2kts(mph):
     """Converts speed in mph to knots"""
     return float(mph) * 0.868976242
+
+def spdlim_ox2bs(spdlim):
+    if type(spdlim) == str:
+        try:
+            spdlim = int(spdlim.strip('mph'))
+        except ValueError:
+            # ValueError occurs when there is a double entry for spd limit
+            # Take the highest one
+            spdlim = max([int(s.strip().replace(' mph', '')) for s in spdlim.split(',')])
+    elif type(spdlim) == int or type(spdlim) == float:
+        pass
+    else:
+        raise TypeError("Undefined type for speedlimit")
+
+    return mph2kts(spdlim)

@@ -1,84 +1,10 @@
-import taxicab as tc 
 import osmnx as ox
 import os
-from shapely import LineString
+import roadroute_lib as rr
 from shapely.ops import linemerge
-from utils import reverse_linestring, simplify_graph, kwikqdrdist, mph2kts
-from collections import Counter
-
-
-def roadroute(G, A, B):
-    """Compute the road route from point A to point B using the taxicab distance.
-    
-    Args:
-        - A: tuple/ list of floats, the starting point (lat, lon)
-        - B: tuple/ list of floats, the destination point (lat, lon)
-    """
-    route = []
-    spdlims = []
-    routepart = tc.distance.shortest_path(G, [A[0], A[1]], 
-                                                [B[0], B[1]])
-
-    # Use the nodes to extract all edges u, v of graph G that the vehicle completely traverses
-    routepart_edges = zip(routepart[1][:-1], routepart[1][1:])
-
-    # routepart at beginning
-    route.append(routepart[2])
-
-    # First time you have to get 2 speed limits, first wp spdlim does not matter, will be reached instantly
-    spdlims.extend([30] * (len(routepart[2].coords)))
-
-    try:
-        # For every pair of edges, append the route with the Shapely LineStrings
-        for u, v in routepart_edges:
-            # Some edges have this attribute embedded, when geometry is curved
-            if 'geometry' in G.edges[(u, v, 0)]:
-                route.append(G.edges[(u, v, 0)]['geometry'])
-                spdlims.extend([G.edges[(u, v, 0)]['maxspeed']] * (len(G.edges[(u, v, 0)]['geometry'].coords) - 1))
-            # Other edges don't have this attribute. These are straight lines between their two nodes.
-            else:
-                # So, get a straight line between the nodes and append that line piece
-                route.append(LineString([(G.nodes[u]['x'], G.nodes[u]['y']), 
-                                        (G.nodes[v]['x'], G.nodes[v]['y'])]))
-                spdlims.extend([G.edges[(u, v, 0)]['maxspeed']])
-    except IndexError:
-        pass
-    
-    try:
-        # Additional check for first linepart directionality. Sometimes it might be facing the wrong way.
-        # The end of the beginning (incomplete) linestring should match
-        try:
-            if not route[1].coords[0] == routepart[2].coords[-1]:
-                # Check if flipped version does align
-                if route[1].coords[0] == routepart[2].coords[0]:
-                    route[0] = reverse_linestring(route[0])
-                else:
-                    raise Exception('Taxicab alignment Error: Coordinates of beginning LineString does not align')
-        except IndexError:
-            pass
-    except AttributeError:
-        pass
-
-    try:
-        # Check whether final incomplete linestring is in proper direction, similar check
-        try:
-            if not route[-1].coords[-1] == routepart[3].coords[0]:
-                # Check if flipped version does align
-                if route[-1].coords[-1] == routepart[3].coords[-1]:
-                    route.append(reverse_linestring(routepart[3]))
-
-                else:
-                    raise Exception('Taxicab alignment Error: Coordinates of final LineString does not align')
-            else:
-                route.append(routepart[3])
-            spdlims.extend([30] * (len(routepart[3].coords) - 1))
-        except IndexError:
-            pass
-    except AttributeError or IndexError:
-        pass
-
-    return linemerge(route), spdlims
-
+from utils import simplify_graph, kwikqdrdist
+from graph_ops import add_missing_spd
+from utils import spdlim_ox2bs
 
 def construct_scenario(road_route, spdlims):
     """Construct the scenario text for the waypoints of the road route.
@@ -160,54 +86,6 @@ def construct_scenario(road_route, spdlims):
 
     return scenario
 
-#(-78.73246705772989, 42.870505, -78.732116, 42.87057069148937)
-
-def spdlim_ox2bs(spdlim):
-    if type(spdlim) == str:
-        try:
-            spdlim = int(spdlim.strip('mph'))
-        except ValueError:
-            # ValueError occurs when there is a double entry for spd limit
-            # Take the highest one
-            spdlim = max([int(s.strip().replace(' mph', '')) for s in spdlim.split(',')])
-    elif type(spdlim) == int or type(spdlim) == float:
-        pass
-    else:
-        raise TypeError("Undefined type for speedlimit")
-
-    return mph2kts(spdlim)
-
-# Function to get the most common speed for each road type
-def most_common_speed(speed_list):
-    return Counter(speed_list).most_common(1)[0][0]
-
-
-def add_missing_spd(G):
-    highwayspds = {}
-    all_speeds = []
-    
-    for edge in G.edges:
-        highway_type = G.edges[edge].get('highway')
-        if 'maxspeed' in G.edges[edge]:
-            if highway_type not in highwayspds:
-                highwayspds[highway_type] = []
-            speed = G.edges[edge]['maxspeed']
-            highwayspds[highway_type].append(speed)
-            all_speeds.append(speed)
-    
-    most_common_speed_dict = {road_type: most_common_speed(speeds) for road_type, speeds in highwayspds.items()}
-    general_most_common_speed = most_common_speed(all_speeds)
-    
-    for edge in G.edges:
-        if 'maxspeed' not in G.edges[edge]:
-            highway_type = G.edges[edge].get('highway')
-            selected_spd = most_common_speed_dict.get(highway_type, general_most_common_speed)
-            G.edges[edge]['maxspeed'] = selected_spd
-
-    return G
-
-
-
 
 lims = (43.03392544699964, 42.81679855300036, -78.67067714771929, -78.9389038522807)
 G = ox.graph_from_bbox(bbox=lims, network_type='drive')
@@ -215,7 +93,8 @@ G = ox.graph_from_bbox(bbox=lims, network_type='drive')
 G = simplify_graph(G)
 G = add_missing_spd(G)
 
-road_route, spdlims = roadroute(G, (42.959024,	-78.719749), (42.958582	,-78.887663))
+road_route, spdlims = rr.roadroute(G, (42.959024,	-78.719749), (42.958582	,-78.887663))
+road_route_merged = linemerge(road_route)
 scenario = construct_scenario(road_route, spdlims)
 
 

@@ -1,15 +1,14 @@
 import os
-import geopy.distance
 import pandas as pd
 import osmnx as ox
-import numpy as np
-import taxicab as tc
 import re
-import matplotlib.pyplot as plt
-from shapely.geometry import LineString, MultiLineString
+import roadroute_lib as rr
+from shapely.geometry import MultiLineString
 from shapely.ops import linemerge
-from utils import kwikqdrdist, plot_linestring, reverse_linestring, \
-                shift_circ_ls, simplify_graph, m2ft, ms2kts, get_map_lims
+from utils import kwikqdrdist, shift_circ_ls, m2ft, ms2kts, spdlim_ox2bs,\
+                    get_city_from_bbox, CityNotFoundError, str_interpret
+
+from graph_ops import add_missing_spd, simplify_graph, get_map_lims
 
 class mFSTSPRoute:
     def __init__(self, input_dir, sol_file):
@@ -43,6 +42,9 @@ class mFSTSPRoute:
         self.data['requireDriver'] = bool(metadata['requireDriver'].iloc[0]),
         self.data['solution'] = solution
 
+        # Retreive vehicle data from input and sol file
+        self.get_vehicle_data()
+
         # Load customer locations
         self.customers = pd.read_csv(self.input_dir + '/tbl_locations.csv')
         self.customers.columns = self.customers.columns.str.strip()
@@ -55,12 +57,33 @@ class mFSTSPRoute:
         customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
         # 4 km border for the map is sufficient
         lims = get_map_lims(customer_latlons, 4)
-        # Adjusted box sizes to include the entire map
-        self.G = ox.graph_from_bbox(bbox=lims, network_type='drive')
-        # Simplify the graph using osmnx
-        self.G = simplify_graph(self.G)
-        # Retreive vehicle data from input and sol file
-        self.get_vehicle_data()
+        try:
+            self.city = get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
+        except CityNotFoundError:
+            print("Customers are in an unknown location")
+
+        # Change directory to graph folder
+        try:
+            graphfolder = '/graphs'
+            os.chdir(os.getcwd() + graphfolder)
+        except:
+            raise Exception('Scenario folder not found')
+        
+        if f'{self.city}.graphml' in os.listdir():
+            # Graph already exists, use that one
+            self.G = ox.load_graphml(filepath=f'{self.city}.graphml',
+                                    edge_dtypes={'osmid': str_interpret,
+                                                'reversed': str_interpret})
+        else:
+            # Adjusted box sizes to include the entire map
+            self.G = ox.graph_from_bbox(bbox=lims, network_type='drive')
+            # Simplify the graph using osmnx
+            self.G = simplify_graph(self.G)
+            # Add missing speeds
+            self.G = add_missing_spd(self.G)
+            ox.save_graphml(self.G, f'{self.city}.graphml')
+
+        os.chdir(os.getcwd().rsplit(graphfolder, 1)[0])
 
     def get_vehicle_data(self):
         """Load the vehicle data that corresponds with the solution file"""
@@ -85,83 +108,34 @@ class mFSTSPRoute:
         self.cust_nodes = self.cust_nodes.astype(int)
         self.cust_nodes = self.cust_nodes[0].unique().tolist()
         route = None 
+        self.spdlims = None
         # zip the customers to create pairs
         cust_pairs = zip(self.cust_nodes[:-1], self.cust_nodes[1:])
 
         for U, V in cust_pairs:
-            custroute = []
-            # Now use the taxicab package to find the shortest path between 2 customer nodes.
-            # Args come in this order: 0: distance, 1: nodes 2: unfinished linepart begin 3: unfinished linepart end
-            # Look up location of customer nodes U and V in the custnode df
-            routepart = tc.distance.shortest_path(self.G,   (self.customers.iloc[U]['latDeg'], 
-                                                        self.customers.iloc[U]['lonDeg']), 
-                                                        (self.customers.iloc[V]['latDeg'], 
-                                                        self.customers.iloc[V]['lonDeg']))
             
-            # Use the nodes to extract all edges u, v of graph G that the vehicle completely traverses
-            routepart_edges = zip(routepart[1][:-1], routepart[1][1:])
+            custroute, custspdlims = rr.roadroute(self.G, (self.customers.iloc[U]['latDeg'], 
+                                            self.customers.iloc[U]['lonDeg']), 
+                                            (self.customers.iloc[V]['latDeg'], 
+                                            self.customers.iloc[V]['lonDeg']))
 
-            # routepart at beginning
-            custroute.append(routepart[2])
-            try:
-                # For every pair of edges, append the route with the Shapely LineStrings
-                for u, v in routepart_edges:
-                    # Some edges have this attribute embedded, when geometry is curved
-                    if 'geometry' in self.G.edges[(u, v, 0)]:
-                        custroute.append(self.G.edges[(u, v, 0)]['geometry'])
-                    # Other edges don't have this attribute. These are straight lines between their two nodes.
-                    else:
-                        # So, get a straight line between the nodes and append that line piece
-                        custroute.append(LineString([(self.G.nodes[u]['x'], self.G.nodes[u]['y']), 
-                                                (self.G.nodes[v]['x'], self.G.nodes[v]['y'])]))
-            except IndexError:
-                pass
-            
-            try:
-                # Additional check for first linepart directionality. Sometimes it might be facing the wrong way.
-                # The end of the beginning (incomplete) linestring should match
-                try:
-                    if not custroute[1].coords[0] == routepart[2].coords[-1]:
-                        # Check if flipped version does align
-                        if custroute[1].coords[0] == routepart[2].coords[0]:
-                            custroute[0] = reverse_linestring(custroute[0])
-                        else:
-                            raise Exception('Taxicab alignment Error: Coordinates of beginning LineString does not align')
-                except IndexError:
-                    pass
-            except AttributeError:
-                pass
-
-            try:
-                # Check whether final incomplete linestring is in proper direction, similar check
-                try:
-                    if not custroute[-1].coords[-1] == routepart[3].coords[0]:
-                        # Check if flipped version does align
-                        if custroute[-1].coords[-1] == routepart[3].coords[-1]:
-                            custroute.append(reverse_linestring(routepart[3]))
-                        else:
-                            raise Exception('Taxicab alignment Error: Coordinates of final LineString does not align')
-                    else:
-                        custroute.append(routepart[3])
-                except IndexError:
-                    pass
-            except AttributeError:
-                pass
-            # for ls in custroute:
-            #     plot_linestring(ls)
-            # add customer route total global route
-            custroute_linestring = linemerge(custroute)  # Combine all parts into a single LineString
+            # Combine all parts into a single LineString
+            custroute_linestring = linemerge(custroute) 
             self.customers.loc[U, 'Route_lat'] = custroute[0].coords[0][1]
             self.customers.loc[U, 'Route_lon'] = custroute[0].coords[0][0]
             # Merge the current custroute into the main route
-            if route is None:
+            # add customer route total global route
+            if route is None and self.spdlims is None:
                 route = custroute_linestring
+                self.spdlims = custspdlims
             else:
                 if route.coords[0] == custroute_linestring.coords[-1]:
                     # If a circular loop is generated, very slightly shift the last coordinates of custroute
                     # Ensures proper directionality of the route
                     custroute_linestring = shift_circ_ls(custroute_linestring)
                 route = linemerge([route, custroute_linestring])
+                # Ignore first spdlim, already included in previous part
+                self.spdlims.extend(custspdlims[1:])
 
             if type(route) == MultiLineString:
                 raise Exception(f'Resulting route is a MultiLineString from nodes {U} to {V}.'
@@ -261,7 +235,7 @@ class mFSTSPRoute:
         acalt = 0 # ft, ground altitude
         acspd = 0 # start with 0 speed from depot
         self.scen_text += f'00:00:00>CRE {trkid} {actype} {route_lats[0]} {route_lons[0]} {achdg} {acalt} {acspd}\n'
-        self.scen_text += f'00:00:00>COLOUR {trkid} RED'
+        self.scen_text += f'00:00:00>COLOUR {trkid} RED\n'
 
         # After creating it, we want to add all the waypoints. We can do that using the ADDTDWAYPOINTS command.
         # ADDTDWAYPOINTS can chain waypoint data in the following way:
@@ -279,7 +253,7 @@ class mFSTSPRoute:
         i = 0
         j = 0
         self.scn_lim = 400
-        for wplat, wplon, turn in zip(route_lats, route_lons, turns):
+        for wplat, wplon, turn, spdlim in zip(route_lats, route_lons, turns, self.spdlims):
             # Check if this waypoint is a turn
             if turn == 'turn' or turn == 'sharpturn':
                 wptype = 'TURNSPD'
@@ -294,16 +268,17 @@ class mFSTSPRoute:
                 self.scen_text += f'\n00:00:00>ADDTDWAYPOINTS {trkid}'
                 i = 0
             i += 1
+            cruisespd = spdlim_ox2bs(spdlim)
             # Add the text for this waypoint. It doesn't matter if we always add a turn speed, as BlueSky will
             # ignore it if the wptype is set as FLYBY
-            self.scen_text += f',{wplat},{wplon},{cruise_alt},,{wptype},{wp_turnspd}'
+            self.scen_text += f',{wplat},{wplon},{cruise_alt},{cruisespd},{wptype},{wp_turnspd}'
 
         # Add delivery commands
         self.delivery_scen(trkid)
         # Add sortie commands
         for UAV in self.UAVs:
             self.sortie_scen(trkid, UAV)
-        self.add_truck_timing(trkid)
+        # self.add_truck_timing(trkid)
         self.scen_text += '\n'
         # Check whether depot is an operation point. If so, delay the LNAV and VNAV
         # LNAV and VNAV will cause the truck to start moving before the operation has taken place
@@ -323,14 +298,17 @@ class mFSTSPRoute:
         self.scen_text += f'00:{"{:02}".format((j * self.scn_lim + i)//100)}:00>{trkid} ATDIST {route_lats[-1]} {route_lons[-1]} {destination_tolerance} TRKDEL {trkid}\n'
 
         # Change directory to scenario folder
+        scenariofolder = '/scenario'
         try:
-            os.chdir(os.getcwd() + '/scenario')
+            os.chdir(os.getcwd() + scenariofolder)
         except:
             raise Exception('Scenario folder not found')
 
         # Save the text in a scenario file
         with open(save_name, 'w') as f:
             f.write(self.scen_text)
+
+        os.chdir(os.getcwd().rsplit(scenariofolder, 1)[0])
 
     def delivery_scen(self, trkid):
         specs = self.vehicle_data[self.vehicle_data['% vehicleID'] == '1']

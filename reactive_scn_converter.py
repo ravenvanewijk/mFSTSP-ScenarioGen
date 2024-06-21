@@ -1,6 +1,8 @@
 import re
 import os
 import pandas as pd
+from graph_ops import get_map_lims
+from utils import get_city_from_bbox, CityNotFoundError
 
 class ReactiveScenario:
 
@@ -12,6 +14,14 @@ class ReactiveScenario:
         self.customers.columns = self.customers.columns.str.strip()
         # Retreive vehicle data from input and sol file
         self.get_vehicle_data()
+
+        customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
+        # 4 km border for the map is sufficient
+        lims = get_map_lims(customer_latlons, 4)
+        try:
+            self.city = get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
+        except CityNotFoundError:
+            print("Customers are in an unknown location")
 
     def get_vehicle_data(self):
         """Load the vehicle data that corresponds with the solution file"""
@@ -28,13 +38,12 @@ class ReactiveScenario:
         self.scen_text = "00:00:00>IMPL ACTIVEWAYPOINT TDActWp\n"
         self.scen_text += "00:00:00>IMPL AUTOPILOT TDAutoPilot\n"
         self.scen_text += "00:00:00>IMPL ROUTE TDRoute\n"
+        self.scen_text += f"00:00:00>LOADGRAPH {os.getcwd()}/graphs/{self.city}.graphml\n"
         # Initiate logging with correct args to track results
         self.scen_text += f"00:00:00>LOG {self.input_dir.split('/')[-1]} {self.sol_file}\n"
-        # Add load timing command such that RTAs can be formulated based on this data
-        self.scen_text += f"00:00:00>LOADTIMING {self.input_dir} tbl_truck_travel_data_PG.csv\n"
         # Extract the number of drones from the sol_file name
         M = re.search(r'_[0-9]+_([0-9]+)_', self.sol_file)[1]
-        self.scen_text += f"00:00:00>REACT {self.vehicle_group} {M}\n"
+        self.scen_text += f"00:00:00>REACT {self.vehicle_group} {M}"
         for index, customer in self.customers.iterrows():
             self.scen_text += f",{customer['latDeg']},{customer['lonDeg']},{customer['parcelWtLbs']}"
 
