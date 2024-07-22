@@ -34,7 +34,7 @@ def main(input_dir, sol_file, solutions_name = 'tbl_solutions'):
 #     main(args.input_dir, args.sol_file)
 
 main("/Users/raven/Documents/TU/MSc/Thesis/Code/mFSTSP/Problems/20170606T123331779163",
-        "tbl_solutions_103_1_Heuristic.csv")
+        "tbl_solutions_102_4_Heuristic.csv")
        
 # main("/Users/raven/Documents/TU/MSc/Thesis/Code/mFSTSP/Problems/20170606T123331779163",
 #         "tbl_solutions_101_1_Heuristic.csv")

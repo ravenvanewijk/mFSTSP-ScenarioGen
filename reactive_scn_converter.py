@@ -2,7 +2,7 @@ import re
 import os
 import pandas as pd
 import graph_gen as gg
-from utils import get_map_lims
+from utils import get_map_lims, m2ft, ms2kts
 
 class ReactiveScenario:
 
@@ -43,7 +43,9 @@ class ReactiveScenario:
         self.scen_text += f"00:00:00>LOG {self.input_dir.split('/')[-1]} {self.sol_file}\n"
         # Extract the number of drones from the sol_file name
         M = re.search(r'_[0-9]+_([0-9]+)_', self.sol_file)[1]
-        self.scen_text += f"00:00:00>REACT {self.vehicle_group} {M}"
+        self.scen_text += f"00:00:00>REACT {self.vehicle_group} {M} "
+        specs = self.vehicle_data[self.vehicle_data['% vehicleID'] == '2']
+        self.scen_text += f"{m2ft(specs['cruiseAlt [m]'].item())} {ms2kts(specs['cruiseSpeed [m/s]'].item())}"
         for index, customer in self.customers.iterrows():
             self.scen_text += f",{customer['latDeg']},{customer['lonDeg']},{customer['parcelWtLbs']}"
 

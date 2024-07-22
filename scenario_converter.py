@@ -69,14 +69,15 @@ class mFSTSPRoute:
         except:
             raise Exception('Graphs folder not found')
         
-        if f'{self.city}.graphml' in os.listdir():
-            # Graph already exists, use that one
-            self.G = ox.load_graphml(filepath=f'{self.city}.graphml',
-                                    edge_dtypes={'osmid': str_interpret,
-                                                'reversed': str_interpret})
-        else:
+        if f'{self.city}.graphml' not in os.listdir():
+            # Graph does not exist, create new one
             gg.generate_graph(lims[0], lims[1], lims[2], lims[3])
 
+        self.G = ox.load_graphml(filepath=f'{self.city}.graphml',
+                                edge_dtypes={'osmid': str_interpret,
+                                            'reversed': str_interpret})
+
+        # Navigate back to original folder                     
         os.chdir(os.getcwd().rsplit(graphfolder, 1)[0])
 
     def get_vehicle_data(self):
