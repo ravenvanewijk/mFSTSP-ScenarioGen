@@ -1,5 +1,5 @@
 from scenario_converter import mFSTSPRoute
-from reactive_scn_converter import ReactiveScenario
+from DC_scn_converter import DCScenario
 import argparse
 import os
 import osmnx as ox
@@ -23,8 +23,8 @@ def main(input_dir, sol_file, solutions_name = 'tbl_solutions'):
         routes.get_sorties()
         routes.construct_scenario(sol.split('.')[0] + '.scn')
 
-        react = ReactiveScenario(input_dir, sol)
-        react.construct_scenario(sol.split('.')[0] + '_reactive.scn')
+        react = DCScenario(input_dir, sol)
+        react.construct_scenario(sol.split('.')[0] + '_DC.scn')
 
 # if __name__ == "__main__":
 #     # Set up argument parser
