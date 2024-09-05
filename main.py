@@ -1,12 +1,18 @@
 from scenario_converter import mFSTSPRoute
 from DC_scn_converter import DCScenario
+from uncertainty import uncertainty_settings
 import argparse
 import os
 import osmnx as ox
 
-def main(input_dir, sol_file, solutions_name = 'tbl_solutions'):
+def main(input_dir, sol_file, uncertainty=False, solutions_name = 'tbl_solutions'):
     # disable caching, reduce clutter
     ox.config(use_cache=False)  
+
+    if uncertainty:
+        if uncertainty.lower() not in list(uncertainty_settings.keys()):
+            raise ValueError('Select valid uncertainty level: ' +\
+                                f'{list(uncertainty_settings.keys())}')
 
     if sol_file.upper() == 'ALL':
         files = os.listdir(input_dir)
@@ -15,7 +21,7 @@ def main(input_dir, sol_file, solutions_name = 'tbl_solutions'):
         solutions_files = [sol_file]
     for sol in solutions_files:
         # Initialize the mFSTSPRoute object with the given parameters
-        routes = mFSTSPRoute(input_dir, sol)
+        routes = mFSTSPRoute(input_dir, sol, uncertainty)
         
         # Perform operations
         routes.construct_truckroute()
@@ -23,7 +29,7 @@ def main(input_dir, sol_file, solutions_name = 'tbl_solutions'):
         routes.get_sorties()
         routes.construct_scenario(sol.split('.')[0] + '.scn')
 
-        react = DCScenario(input_dir, sol)
+        react = DCScenario(input_dir, sol, uncertainty)
         react.construct_scenario(sol.split('.')[0] + '_DC.scn')
 
 # if __name__ == "__main__":

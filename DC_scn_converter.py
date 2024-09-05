@@ -1,18 +1,28 @@
 import re
 import os
 import pandas as pd
+import numpy as np
 import graph_gen as gg
 from utils import get_map_lims, m2ft, ms2kts
+from uncertainty import generate_delivery_times, uncertainty_settings
 
 class DCScenario:
 
-    def __init__(self, input_dir, sol_file):
+    def __init__(self, input_dir, sol_file, uncertainty=False):
         self.input_dir = input_dir
         self.sol_file = sol_file
         self.vehicle_group = re.search(r'\d+', self.sol_file).group()
         # Load customer locations
         self.customers = pd.read_csv(self.input_dir + '/tbl_locations.csv')
         self.customers.columns = self.customers.columns.str.strip()
+        self.uncertainty = uncertainty
+        if self.uncertainty:
+            self.customers['del_unc'] = [0] + list(generate_delivery_times(
+                        len(self.customers) - 2, 
+                        uncertainty_settings[self.uncertainty]['mu_del'],
+                        uncertainty_settings[self.uncertainty]['min_delay'])) + [0]
+        else:
+            self.customers['del_unc'] = np.zeros(len(self.customers))
 
         customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
         # 4 km border for the map is sufficient
@@ -38,7 +48,7 @@ class DCScenario:
         self.scen_text += f"00:00:00>DELIVER {self.vehicle_group} {M} "
         self.scen_text += (f"{self.input_dir.split('/')[-1]}")
         for index, customer in self.customers.iterrows():
-            self.scen_text += f",{customer['latDeg']},{customer['lonDeg']},{customer['parcelWtLbs']}"
+            self.scen_text += f",{customer['latDeg']},{customer['lonDeg']},{customer['del_unc']}"
 
         destination_tolerance = 3/1852 
         self.scen_text += (

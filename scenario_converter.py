@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import osmnx as ox
+import numpy as np
 import re
 import roadroute_lib as rr
 import graph_gen as gg
@@ -8,16 +9,17 @@ from shapely.geometry import MultiLineString
 from shapely.ops import linemerge
 from utils import kwikqdrdist, shift_circ_ls, m2ft, ms2kts, get_map_lims,\
                     str_interpret
-
+from uncertainty import generate_delivery_times, uncertainty_settings
 
 class mFSTSPRoute:
-    def __init__(self, input_dir, sol_file):
+    def __init__(self, input_dir, sol_file, uncertainty=False):
         self.input_dir = input_dir
         self.sol_file = sol_file
         self.route_waypoints = {}
         self.route_lats = {}
         self.route_lons = {}
         self.data = {}
+        self.uncertainty = uncertainty
         # extract all data from solution file
         data = pd.read_csv(self.input_dir + '/' + self.sol_file)
         # metadata is first few lines
@@ -53,6 +55,14 @@ class mFSTSPRoute:
         self.depot_return_id = self.customers.index[-1]
         # Give correct index to this node
         self.customers.at[self.depot_return_id, '% nodeID'] = self.depot_return_id
+
+        if self.uncertainty:
+            self.customers['del_unc'] = [0] + list(generate_delivery_times(
+                        len(self.customers) - 2, 
+                        uncertainty_settings[self.uncertainty]['mu_del'],
+                        uncertainty_settings[self.uncertainty]['min_delay'])) + [0]
+        else:
+            self.customers['del_unc'] = np.zeros(len(self.customers))
 
         customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
         # 4 km border for the map is sufficient
@@ -290,7 +300,8 @@ class mFSTSPRoute:
         # Delete truck at route end
         # It is considered it arrived if it is within 3 metres of the destination, converted to nautical miles.
         destination_tolerance = 3/1852 
-        self.scen_text += f'00:{"{:02}".format((j * self.scn_lim + i)//100)}:00>{trkid} ATDIST {route_lats[-1]} {route_lons[-1]} {destination_tolerance} TRKDEL {trkid}\n'
+        self.scen_text += f'00:{"{:02}".format((j * self.scn_lim + i)//100)}:00>{trkid} ATDIST {route_lats[-1]}'
+        self.scen_text += f' {route_lons[-1]} {destination_tolerance} TRKDEL {trkid}\n'
 
         # Change directory to scenario folder
         scenariofolder = '/scenario'
@@ -307,9 +318,14 @@ class mFSTSPRoute:
 
     def delivery_scen(self, trkid):
         specs = self.vehicle_data[self.vehicle_data['% vehicleID'] == '1']
+        # if self.uncertainty:
+        #     del_time_base = float(specs['serviceTime [sec]'].item()) - uncertainty_settings[self.uncertainty]['mu_del']
+        # else:
+        #     del_time_base = float(specs['serviceTime [sec]'].item())
         for node in self.delivery_nodes:
             self.scen_text += f"\n00:00:00>ADDOPERATIONPOINTS {trkid} {self.customers.loc[node]['Route_lat']}/" + \
-                            f"{self.customers.loc[node]['Route_lon']}, DELIVERY, {specs['serviceTime [sec]'].item()}"
+                            f"{self.customers.loc[node]['Route_lon']}, DELIVERY, "+\
+                            f"{float(specs['serviceTime [sec]'].item()) + self.customers['del_unc'][node]}"
 
     def sortie_scen(self, trkid, UAVnumber):
         """Function that writes the text of sorties on top of existing text. This should come after the waypoints have
@@ -335,7 +351,8 @@ class mFSTSPRoute:
                 self.scen_text += f"\n00:00:00>ADDOPERATIONPOINTS {trkid}, {i_coords}, SORTIE, "+\
                             f"{specs['launchTime [sec]'].item()}, {UAV_type}, {int(UAVnumber) - 1}, {j_lat}, "+\
                             f"{j_lon}, {k_coords}, {m2ft(specs['cruiseAlt [m]'].item())}, "+\
-                            f"{ms2kts(specs['cruiseSpeed [m/s]'].item())} {specs['serviceTime [sec]'].item()}, " +\
+                            f"{ms2kts(specs['cruiseSpeed [m/s]'].item())}, " +\
+                            f"{float(specs['serviceTime [sec]'].item()) + self.customers['del_unc'][j]}, " +\
                             f"{specs['recoveryTime [sec]'].item()}"
 
     def add_truck_timing(self, trkid):
