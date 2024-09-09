@@ -91,7 +91,7 @@ class mFSTSPRoute:
         
         if f'{self.city}.graphml' not in os.listdir():
             # Graph does not exist, create new one
-            gg.generate_graph(lims[0], lims[1], lims[2], lims[3])
+            gg.generate_graph(lims[0], lims[1], lims[2], lims[3], self.city)
 
         self.G = ox.load_graphml(filepath=f'{self.city}.graphml',
                                 edge_dtypes={'osmid': str_interpret,
