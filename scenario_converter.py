@@ -73,7 +73,7 @@ class mFSTSPRoute:
                     "Buffalo": (42.8864, -78.8784)
                     }
 
-        nearest_city = find_nearest_city((np.mean((lims[0], lims[1])), 
+        self.city = find_nearest_city((np.mean((lims[0], lims[1])), 
                                         np.mean((lims[2], lims[3]))), 
                                         city_coords)
         
