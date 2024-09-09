@@ -61,8 +61,10 @@ class DCScenario:
                         )
 
         # Change directory to scenario folder
+        scenariofolder = '/scenario'
+
         try:
-            os.chdir(os.getcwd() + '/scenario')
+            os.chdir(os.getcwd() + scenariofolder)
         except:
             if os.getcwd().split('/')[-1] == 'scenario':
                 pass
@@ -72,3 +74,5 @@ class DCScenario:
         # Save the text in a scenario file
         with open(save_name, 'w') as f:
             f.write(self.scen_text)
+
+        os.chdir(os.getcwd().rsplit(scenariofolder, 1)[0])
