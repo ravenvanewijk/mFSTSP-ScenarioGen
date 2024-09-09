@@ -229,7 +229,9 @@ class mFSTSPRoute:
         self.scen_text += "00:00:00>IMPL ROUTE TDRoute\n"
         self.scen_text += f'00:00:00>PAN {route_lats[0]} {route_lons[0]}\n' # Pan to the origin
         self.scen_text += "00:00:00>ZOOM 50\n" # Zoom in
-        self.scen_text += f"00:00:00>LOG {self.input_dir.split('/')[-1]} {self.sol_file}\n"
+        log_file = str(len(self.customers) - 2) + '_' + self.sol_file.rstrip('_Heuristic.csv') +\
+                        '_MR_' + str(self.uncertainty)
+        self.scen_text += f"00:00:00>LOG {log_file} {self.input_dir.split('/')[-1]}\n"
 
         # Get angle of first direction to ensure correct orientation
         achdg, _ = kwikqdrdist(route_lats[0], route_lons[0], route_lats[1], route_lons[1])

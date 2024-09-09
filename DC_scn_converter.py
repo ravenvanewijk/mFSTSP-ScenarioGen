@@ -42,7 +42,9 @@ class DCScenario:
         self.scen_text += "00:00:00>IMPL ROUTE TDRoute\n"
         self.scen_text += f"00:00:00>LOADGRAPH {os.getcwd()}/graphs/{self.city}.graphml\n"
         # Initiate logging with correct args to track results
-        self.scen_text += f"00:00:00>LOG {self.input_dir.split('/')[-1]} {self.sol_file}\n"
+        log_file = str(len(self.customers) - 1) + '_' + self.sol_file.rstrip('_Heuristic.csv') +\
+                        '_DC_' + str(self.uncertainty)
+        self.scen_text += f"00:00:00>LOG {log_file} {self.input_dir.split('/')[-1]}\n"
         # Extract the number of drones from the sol_file name
         M = re.search(r'_[0-9]+_([0-9]+)_', self.sol_file)[1]
         self.scen_text += f"00:00:00>DELIVER {self.vehicle_group} {M} "
