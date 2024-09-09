@@ -119,7 +119,7 @@ class mFSTSPRoute:
 
         for U, V in cust_pairs:
             
-            custroute, custspdlims = rr.roadroute(self.G, (self.customers.iloc[U]['latDeg'], 
+            custroute, custspdlims, _ = rr.roadroute(self.G, (self.customers.iloc[U]['latDeg'], 
                                             self.customers.iloc[U]['lonDeg']), 
                                             (self.customers.iloc[V]['latDeg'], 
                                             self.customers.iloc[V]['lonDeg']))

@@ -1,0 +1,39 @@
+attrs==23.2.0
+certifi==2024.6.2
+charset-normalizer==3.3.2
+click==8.1.7
+click-plugins==1.1.1
+cligj==0.7.2
+contourpy==1.2.1
+cycler==0.12.1
+fiona==1.9.6
+fonttools==4.53.0
+geographiclib==2.0
+geopandas==0.14.4
+geopy==2.4.1
+graph-gen @ git+https://github.com/ravenvanewijk/mFSTSP-GraphGen@2a2f019682b0f6ec5a1c978c44223364ce2d0c04
+idna==3.7
+importlib_metadata==7.2.0
+importlib_resources==6.4.0
+kiwisolver==1.4.5
+matplotlib==3.9.0
+networkx==3.2.1
+numpy==2.0.0
+osmnx==1.9.3
+packaging==24.1
+pandas==2.2.2
+pillow==10.3.0
+pyparsing==3.1.2
+pyproj==3.6.1
+python-dateutil==2.9.0.post0
+pytz==2024.1
+requests==2.32.3
+roadroute-lib @ git+https://github.com/ravenvanewijk/roadroute-lib.git@7f6b53b0068e7675350fd666590591cf810b6728
+setuptools==69.5.1
+shapely==2.0.4
+six==1.16.0
+taxicab_st @ git+https://github.com/ravenvanewijk/taxicab-st@680a5b097863e1f69b241bfa46b4a4b1ed55f784
+tzdata==2024.1
+urllib3==1.26.19
+wheel==0.43.0
+zipp==3.19.2

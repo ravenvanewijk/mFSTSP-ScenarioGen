@@ -48,8 +48,10 @@ def main(input_dir='ALL', sol_file='ALL', uncertainty=False, solutions_name='tbl
 if __name__ == "__main__":
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Convert mFSTSPRoute operations to scn file")
-    parser.add_argument('input_dir', type=str, help="Path to the input directory.")
-    parser.add_argument('sol_file', type=str, help="Name of the solution file.")
+    parser.add_argument('input_dir', type=str, nargs='?', \
+            default='ALL', help="Path to the input directory.")
+    parser.add_argument('sol_file', type=str, nargs='?', \
+            default='ALL', help="Name of the solution file.")
     # Parse the arguments
     args = parser.parse_args()
     main(args.input_dir, args.sol_file)
