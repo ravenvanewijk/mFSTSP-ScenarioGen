@@ -8,7 +8,7 @@ import graph_gen as gg
 from shapely.geometry import MultiLineString
 from shapely.ops import linemerge
 from utils import kwikqdrdist, shift_circ_ls, m2ft, ms2kts, get_map_lims,\
-                    str_interpret
+                    str_interpret, find_nearest_city
 from uncertainty import generate_delivery_times, uncertainty_settings
 
 class mFSTSPRoute:
@@ -67,10 +67,20 @@ class mFSTSPRoute:
         customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
         # 4 km border for the map is sufficient
         lims = get_map_lims(customer_latlons, 4)
-        try:
-            self.city = gg.get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
-        except gg.utils.CityNotFoundError:
-            print("Customers are in an unknown location")
+
+        city_coords = {
+                    "Seattle": (47.6062, -122.3321),
+                    "Buffalo": (42.8864, -78.8784)
+                    }
+
+        nearest_city = find_nearest_city((np.mean((lims[0], lims[1])), 
+                                        np.mean((lims[2], lims[3]))), 
+                                        city_coords)
+        
+        # try:
+        #     self.city = gg.get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
+        # except gg.utils.CityNotFoundError:
+        #     print("Customers are in an unknown location")
 
         # Change directory to graph folder
         try:

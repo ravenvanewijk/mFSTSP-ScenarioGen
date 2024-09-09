@@ -5,6 +5,7 @@ import argparse
 import os
 import re
 import osmnx as ox
+import tqdm
 import multiprocessing as mp
 
 mp.set_start_method('fork')
@@ -13,7 +14,7 @@ def main(input_dir='ALL', sol_file='ALL', uncertainty=False, solutions_name='tbl
             file_pattern=r'^\d{8}T\d{6}\d{6}$', problem_dir='../mFSTSP/Problems/'):
     # disable caching, reduce clutter
     ox.config(use_cache=False)  
-
+    input_arr = []
     if uncertainty:
         if uncertainty.lower() not in list(uncertainty_settings.keys()):
             raise ValueError('Select valid uncertainty level: ' +\
@@ -73,6 +74,8 @@ if __name__ == "__main__":
     # Parse the arguments
     args = parser.parse_args()
     input_arr = main(args.input_dir, args.sol_file)
+
+    # make_scen(input_arr[0])
     
     with mp.Pool(16) as p:
-        results = list(tqdm.tqdm(p.imap(make_scen. input_arr)), total = len(input_arr))
+        results = list(tqdm.tqdm(p.imap(make_scen, input_arr), total = len(input_arr)))

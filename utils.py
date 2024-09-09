@@ -49,6 +49,19 @@ def get_map_lims(customer_locs, margin, unit='km'):
     # Return the coordinates as a tuple
     return (box_latmax, box_latmin, box_lonmax, box_lonmin)
 
+def find_nearest_city(location, city_coords):
+    """Find the nearest city to a given location."""
+    nearest_city = None
+    min_distance = float('inf')
+
+    for city, (city_lat, city_lon) in city_coords.items():
+        _, distance = kwikqdrdist(location[0], location[1], city_lat, city_lon)
+        if distance < min_distance:
+            min_distance = distance
+            nearest_city = city
+
+    return nearest_city
+
 def kwikqdrdist(lata, lona, latb, lonb):
     """Gives quick and dirty qdr[deg] and dist [m]
        from lat/lon. (note: does not work well close to poles)"""
