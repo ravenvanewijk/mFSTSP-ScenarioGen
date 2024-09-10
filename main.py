@@ -66,11 +66,12 @@ if __name__ == "__main__":
             default='ALL', help="Name of the solution file.")
     # Parse the arguments
     args = parser.parse_args()
-    # args.input_dir = '../mFSTSP/Problems/20170607T111828707735'
-    # args.sol_file = 'tbl_solutions_102_3_Heuristic.csv'
+    # args.input_dir = '../mFSTSP/Problems/20170608T121844810174'
+    # args.sol_file = 'tbl_solutions_101_1_Heuristic.csv'
     input_arr = main(args.input_dir, args.sol_file)
 
-    # make_scen(input_arr[0])
-    
+    # for inp in input_arr:
+    #     make_scen(inp)
+
     with mp.Pool(16) as p:
         results = list(tqdm.tqdm(p.imap(make_scen, input_arr), total = len(input_arr)))

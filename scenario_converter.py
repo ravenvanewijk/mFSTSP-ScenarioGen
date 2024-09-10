@@ -65,8 +65,8 @@ class mFSTSPRoute:
             self.customers['del_unc'] = np.zeros(len(self.customers))
 
         customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
-        # 4 km border for the map is sufficient
-        lims = get_map_lims(customer_latlons, 4)
+        # 10 km border for the map is sufficient
+        lims = get_map_lims(customer_latlons, 10)
 
         self.city = find_nearest_city((np.mean((lims[0], lims[1])), 
                                         np.mean((lims[2], lims[3]))), 
@@ -130,9 +130,12 @@ class mFSTSPRoute:
                                             self.customers.iloc[V]['lonDeg']))
 
             # Combine all parts into a single LineString
-            custroute_linestring = linemerge(custroute) 
-            self.customers.loc[U, 'Route_lat'] = custroute[0].coords[0][1]
-            self.customers.loc[U, 'Route_lon'] = custroute[0].coords[0][0]
+            custroute_linestring = linemerge(custroute)
+            if len(custroute) > 0: 
+                self.customers.loc[U, 'Route_lat'] = custroute[0].coords[0][1]
+                self.customers.loc[U, 'Route_lon'] = custroute[0].coords[0][0]
+            else:
+                continue
             # Merge the current custroute into the main route
             # add customer route total global route
             if route is None and self.spdlims is None:
