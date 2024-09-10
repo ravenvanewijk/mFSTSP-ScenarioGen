@@ -11,7 +11,7 @@ fonttools==4.53.0
 geographiclib==2.0
 geopandas==0.14.4
 geopy==2.4.1
-graph-gen @ git+https://github.com/ravenvanewijk/mFSTSP-GraphGen@2a2f019682b0f6ec5a1c978c44223364ce2d0c04
+graph-gen @ git+https://github.com/ravenvanewijk/mFSTSP-GraphGen@80aaa74bfd12c184b2e98512bf987b6aad08886c
 idna==3.7
 importlib_metadata==7.2.0
 importlib_resources==6.4.0
@@ -28,11 +28,11 @@ pyproj==3.6.1
 python-dateutil==2.9.0.post0
 pytz==2024.1
 requests==2.32.3
-roadroute-lib @ git+https://github.com/ravenvanewijk/roadroute-lib.git@1d2961996b94d0788c9295de157fd0c42d84ea5c
+roadroute-lib @ git+https://github.com/ravenvanewijk/roadroute-lib.git@bb1bf3a3eb91bde87595ee6ceca15f2f5eb21d1e
 setuptools==69.5.1
 shapely==2.0.4
 six==1.16.0
-taxicab_st @ git+https://github.com/ravenvanewijk/taxicab-st@680a5b097863e1f69b241bfa46b4a4b1ed55f784
+tqdm==4.66.5
 tzdata==2024.1
 urllib3==1.26.19
 wheel==0.43.0

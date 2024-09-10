@@ -11,7 +11,8 @@ import multiprocessing as mp
 mp.set_start_method('fork')
 
 def main(input_dir='ALL', sol_file='ALL', uncertainty=False, solutions_name='tbl_solutions',
-            file_pattern=r'^\d{8}T\d{6}\d{6}$', problem_dir='../mFSTSP/Problems/'):
+            file_pattern=r'^\d{8}T\d{6}\d{6}$', problem_dir='../mFSTSP/Problems/',
+            drone_type='101'):
     # disable caching, reduce clutter
     ox.config(use_cache=False)  
     input_arr = []
@@ -32,7 +33,10 @@ def main(input_dir='ALL', sol_file='ALL', uncertainty=False, solutions_name='tbl
     for input_dir in input_dirs:
         if sol_file.upper() == 'ALL':
             files = os.listdir(input_dir)
-            solutions_files = [filename for filename in files if solutions_name in filename]
+            solutions_files = [filename for filename in files if 
+                                solutions_name in filename and
+                                drone_type in filename and
+                                'Heuristic' in filename]
         else:
             solutions_files = [sol_file]
         for sol in solutions_files:
@@ -40,17 +44,6 @@ def main(input_dir='ALL', sol_file='ALL', uncertainty=False, solutions_name='tbl
             input_arr.append([input_dir, sol, uncertainty])
 
     return input_arr
-            # # Initialize the mFSTSPRoute object with the given parameters
-            # routes = mFSTSPRoute(input_dir, sol, uncertainty)
-            
-            # # Perform operations
-            # routes.construct_truckroute()
-            # routes.get_deliveries()
-            # routes.get_sorties()
-            # routes.construct_scenario(sol.split('.')[0] + '.scn')
-
-            # react = DCScenario(input_dir, sol, uncertainty)
-            # react.construct_scenario(sol.split('.')[0] + '_DC.scn')
 
 def make_scen(input_):
     input_dir, sol, uncertainty = input_
@@ -73,6 +66,8 @@ if __name__ == "__main__":
             default='ALL', help="Name of the solution file.")
     # Parse the arguments
     args = parser.parse_args()
+    # args.input_dir = '../mFSTSP/Problems/20170607T111828707735'
+    # args.sol_file = 'tbl_solutions_102_3_Heuristic.csv'
     input_arr = main(args.input_dir, args.sol_file)
 
     # make_scen(input_arr[0])
