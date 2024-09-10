@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import numpy as np
 import graph_gen as gg
-from utils import get_map_lims, m2ft, ms2kts
+from utils import get_map_lims, m2ft, ms2kts, find_nearest_city, city_coords
 from uncertainty import generate_delivery_times, uncertainty_settings
 
 class DCScenario:
@@ -27,10 +27,13 @@ class DCScenario:
         customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
         # 4 km border for the map is sufficient
         lims = get_map_lims(customer_latlons, 4)
-        try:
-            self.city = gg.get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
-        except gg.CityNotFoundError:
-            print("Customers are in an unknown location")
+        self.city = find_nearest_city((np.mean((lims[0], lims[1])), 
+                                np.mean((lims[2], lims[3]))), 
+                                city_coords)
+        # try:
+        #     self.city = gg.get_city_from_bbox(lims[0], lims[1], lims[2], lims[3])
+        # except gg.CityNotFoundError:
+        #     print("Customers are in an unknown location")
         
         self.truckname = 'TRUCK'
 

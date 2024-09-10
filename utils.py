@@ -4,6 +4,10 @@ import math
 from shapely.geometry import LineString
 from shapely.ops import linemerge
 
+city_coords = {
+            "Seattle": (47.6062, -122.3321),
+            "Buffalo": (42.8864, -78.8784)
+            }
 
 def get_map_lims(customer_locs, margin, unit='km'):
     """Function to get map limits where all customers fit in.
