@@ -64,14 +64,17 @@ if __name__ == "__main__":
             default='ALL', help="Path to the input directory.")
     parser.add_argument('sol_file', type=str, nargs='?', \
             default='ALL', help="Name of the solution file.")
+    parser.add_argument('uncertainty', type=str, nargs='?', \
+            default=False, help="Uncertainty included in the scenario.")
     # Parse the arguments
     args = parser.parse_args()
-    # args.input_dir = '../mFSTSP/Problems/20170608T121844810174'
-    # args.sol_file = 'tbl_solutions_101_1_Heuristic.csv'
-    input_arr = main(args.input_dir, args.sol_file)
+    args.input_dir = '../mFSTSP/Problems/20170608T121844810174'
+    args.sol_file = 'tbl_solutions_101_1_Heuristic.csv'
+    args.uncertainty = 'light'
+    input_arr = main(args.input_dir, args.sol_file, args.uncertainty)
 
-    # for inp in input_arr:
-    #     make_scen(inp)
+    for inp in input_arr:
+        make_scen(inp)
 
-    with mp.Pool(16) as p:
-        results = list(tqdm.tqdm(p.imap(make_scen, input_arr), total = len(input_arr)))
+    # with mp.Pool(4) as p:
+    #     results = list(tqdm.tqdm(p.imap(make_scen, input_arr), total = len(input_arr)))

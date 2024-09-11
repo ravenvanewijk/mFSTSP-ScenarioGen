@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 import graph_gen as gg
 from utils import get_map_lims, m2ft, ms2kts, find_nearest_city, city_coords
-from uncertainty import generate_delivery_times, uncertainty_settings
+from uncertainty import generate_delivery_times, uncertainty_settings, \
+                        generate_drone_speed
 
 class DCScenario:
 
@@ -50,6 +51,12 @@ class DCScenario:
         self.scen_text += f"00:00:00>LOG {log_file} {self.input_dir.split('/')[-1]}\n"
         # Extract the number of drones from the sol_file name
         M = re.search(r'_[0-9]+_([0-9]+)_', self.sol_file)[1]
+        self.scen_text += f"00:00:00>DRONEUNC {bool(self.uncertainty)} "
+        if self.uncertainty:
+            spd_vars = generate_drone_speed(uncertainty_settings[self.uncertainty]['spd_change_prob'],
+                                uncertainty_settings[self.uncertainty]['spd_change_mag'], length=10*int(M))
+            self.scen_text += ", ".join(str(v) for v in spd_vars)
+        self.scen_text += "\n"
         self.scen_text += f"00:00:00>DELIVER {self.vehicle_group} {M} "
         self.scen_text += (f"{self.input_dir.split('/')[-1]}")
         for index, customer in self.customers.iterrows():
@@ -73,6 +80,14 @@ class DCScenario:
                 pass
             else:
                 raise Exception('Scenario folder not found')
+
+        save_dir = self.input_dir.rsplit('Problems/')[-1]
+        if not os.path.exists(save_dir):
+            # Create the directory if it doesn't exist
+            os.makedirs(save_dir)
+        
+        # Change the current working directory to the input_dir
+        os.chdir(save_dir)
 
         # Save the text in a scenario file
         with open(save_name, 'w') as f:

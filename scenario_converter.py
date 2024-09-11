@@ -9,7 +9,8 @@ from shapely.geometry import MultiLineString
 from shapely.ops import linemerge
 from utils import kwikqdrdist, shift_circ_ls, m2ft, ms2kts, get_map_lims,\
                     str_interpret, find_nearest_city, city_coords
-from uncertainty import generate_delivery_times, uncertainty_settings
+from uncertainty import generate_delivery_times, uncertainty_settings, \
+                        generate_drone_speed
 
 class mFSTSPRoute:
     def __init__(self, input_dir, sol_file, uncertainty=False):
@@ -56,13 +57,18 @@ class mFSTSPRoute:
         # Give correct index to this node
         self.customers.at[self.depot_return_id, '% nodeID'] = self.depot_return_id
 
+        M = re.search(r'_[0-9]+_([0-9]+)_', self.sol_file)[1]
         if self.uncertainty:
             self.customers['del_unc'] = [0] + list(generate_delivery_times(
                         len(self.customers) - 2, 
                         uncertainty_settings[self.uncertainty]['mu_del'],
                         uncertainty_settings[self.uncertainty]['min_delay'])) + [0]
+
+            self.spd_factors = generate_drone_speed(uncertainty_settings[self.uncertainty]['spd_change_prob'],
+                                uncertainty_settings[self.uncertainty]['spd_change_mag'], length=10*int(M))
         else:
             self.customers['del_unc'] = np.zeros(len(self.customers))
+            self.spd_factors = np.zeros(10*int(M))
 
         customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
         # 10 km border for the map is sufficient
@@ -320,6 +326,14 @@ class mFSTSPRoute:
         except:
             raise Exception('Scenario folder not found')
 
+        save_dir = self.input_dir.rsplit('Problems/')[-1]
+        if not os.path.exists(save_dir):
+            # Create the directory if it doesn't exist
+            os.makedirs(save_dir)
+        
+        # Change the current working directory to the input_dir
+        os.chdir(save_dir)
+
         # Save the text in a scenario file
         with open(save_name, 'w') as f:
             f.write(self.scen_text)
@@ -343,6 +357,7 @@ class mFSTSPRoute:
         args: type, description
         - trkid: str, identifyer of the truck that will perform the operation
         - UAVnumber: str, identifyer of the UAV that will be dispatched"""
+        count = 0
         UAVtrips = self.trips[UAVnumber]
         UAV_type = f'M{self.vehicle_group}'
         specs = self.vehicle_data[self.vehicle_data['% vehicleID'] == UAVnumber]
@@ -361,9 +376,10 @@ class mFSTSPRoute:
                 self.scen_text += f"\n00:00:00>ADDOPERATIONPOINTS {trkid}, {i_coords}, SORTIE, "+\
                             f"{specs['launchTime [sec]'].item()}, {UAV_type}, {int(UAVnumber) - 1}, {j_lat}, "+\
                             f"{j_lon}, {k_coords}, {m2ft(specs['cruiseAlt [m]'].item())}, "+\
-                            f"{ms2kts(specs['cruiseSpeed [m/s]'].item())}, " +\
+                            f"{self.spd_factors[count] * ms2kts(specs['cruiseSpeed [m/s]'].item())}, " +\
                             f"{float(specs['serviceTime [sec]'].item()) + self.customers['del_unc'][j]}, " +\
                             f"{specs['recoveryTime [sec]'].item()}"
+                count += 1
 
     def add_truck_timing(self, trkid):
         self.scen_text += f'\n00:00:00>TDRTAs {trkid}'

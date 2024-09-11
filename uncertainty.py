@@ -21,6 +21,27 @@ def generate_delivery_times(n, desired_mu_delay=10, min_delay=-10,
     delivery_times = np.random.gamma(shape=shape_parameter, scale=scale_parameter, size=n)
     return delivery_times + min_delay
 
+def generate_drone_speed(prob, mag, length=1):
+    """This function randomly determines whether a drone travels at its usual 
+    speed, slower or faster. 
+    
+    Arguments:
+        - prob: float, probability of mutation (between 0 and 1)
+        - mag: float, percentage change of the speed of the drone if 
+          the speed is changed
+        - length: int, number of speeds to randomize
+    """
+    factor_lst = []
+    
+    for _ in range(length):
+        if np.random.rand() < prob:
+            factor = np.random.choice([1 - mag, 1 + mag])
+        else:
+            factor = 1
+        factor_lst.append(float(factor))
+    
+    return factor_lst
+
 def plot_delivery_times(delivery_times, mean_delivery_time):
     """
     Plots the histogram of the delivery times.
@@ -40,7 +61,10 @@ def plot_delivery_times(delivery_times, mean_delivery_time):
 # plot_delivery_times(de, 10)
 
 uncertainty_settings = {
-            'light': {'mu_del': 10, 'min_delay': -10},
-            'medium': {'mu_del': 15, 'min_delay': -15},
-            'heavy': {'mu_del': 20, 'min_delay': -20},
+            'light': {'mu_del': 10, 'min_delay': -10,
+                        'spd_change_prob': 0.2, 'spd_change_mag': 0.2},
+            'medium': {'mu_del': 15, 'min_delay': -15,
+                        'spd_change_prob': 0.3, 'spd_change_mag': 0.3},
+            'heavy': {'mu_del': 20, 'min_delay': -20,
+                        'spd_change_prob': 0.4, 'spd_change_mag': 0.4}
                         }
