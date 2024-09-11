@@ -66,7 +66,7 @@ if __name__ == "__main__":
             default='ALL', help="Name of the solution file.")
     # Parse the arguments
     args = parser.parse_args()
-    # args.input_dir = '../mFSTSP/Problems/20170608T121844810174'
+    # args.input_dir = '../mFSTSP/Problems/20170606T115303341654'
     # args.sol_file = 'tbl_solutions_101_1_Heuristic.csv'
     input_arr = main(args.input_dir, args.sol_file)
 
