@@ -69,7 +69,7 @@ if __name__ == "__main__":
     # Parse the arguments
     args = parser.parse_args()
     args.input_dir = '../mFSTSP/Problems/20170608T121710107640'
-    args.sol_file = 'tbl_solutions_101_1_Heuristic.csv'
+    # args.sol_file = 'tbl_solutions_101_1_Heuristic.csv'
     args.uncertainty = 'heavy'
     input_arr = main(args.input_dir, args.sol_file, args.uncertainty)
 

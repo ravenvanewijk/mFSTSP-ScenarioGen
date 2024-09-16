@@ -64,7 +64,8 @@ class DCScenario:
         self.scen_text += f"00:00:00>LOG {log_file} {self.input_dir.split('/')[-1]}\n"
         # Extract the number of drones from the sol_file name
         M = re.search(r'_[0-9]+_([0-9]+)_', self.sol_file)[1]
-        self.scen_text += f"00:00:00>DRONEUNC {bool(self.uncertainty)} "
+        self.scen_text += f"00:00:00>UNCERTAINTY {bool(self.uncertainty)} \n"
+        self.scen_text += f"00:00:00>DRONEUNC "
         if self.uncertainty:
             spd_vars = generate_drone_speed(uncertainty_settings[self.uncertainty]['spd_change_prob'],
                                 uncertainty_settings[self.uncertainty]['spd_change_mag'], length=10*int(M))
@@ -75,14 +76,38 @@ class DCScenario:
         for index, customer in self.customers.iterrows():
             self.scen_text += f",{customer['latDeg']},{customer['lonDeg']},{customer['del_unc']}"
 
+        reset_cmd_time = len(self.customers)//5
+        approx_max_endtime = 60*60*len(self.customers) // 4
+
+        if self.uncertainty:
+            time = uncertainty_settings[self.uncertainty]['stop_interval']
+            while time / 60 < reset_cmd_time and time < approx_max_endtime:
+                self.scen_text += (
+                f"00:{'{:02}'.format(time)}:00>"
+                f"ADDOPERATIONPOINTS {self.truckname} STOP "
+                f"{uncertainty_settings[self.uncertainty]['stop_length']} \n"
+                            )
+                time += uncertainty_settings[self.uncertainty]['stop_interval']
+            self.scen_text += '\n'
+
         destination_tolerance = 3/1852 
         self.scen_text += (
-            f"\n00:{'{:02}'.format(len(self.customers)//5)}:00>"
+            f"00:{'{:02}'.format(reset_cmd_time)}:00>"
             f"{self.truckname} ATDIST {self.customers.loc[0]['latDeg']} "
             f"{self.customers.loc[0]['lonDeg']} {destination_tolerance} "
-            f"TRKDEL {self.truckname}"
+            f"TRKDEL {self.truckname} \n"
                         )
 
+        if self.uncertainty:
+            while time < approx_max_endtime:
+                minutes, seconds = divmod(time, 60)
+                hours, minutes = divmod(minutes, 60)
+                self.scen_text += (
+                f"{'{:02}'.format(hours)}:{'{:02}'.format(minutes)}:{'{:02}'.format(seconds)}>"
+                f"ADDOPERATIONPOINTS {self.truckname} CURLOC STOP "
+                f"{uncertainty_settings[self.uncertainty]['stop_length']} \n"
+                            )
+                time += uncertainty_settings[self.uncertainty]['stop_interval']
         # Change directory to scenario folder
         scenariofolder = '/scenario'
 

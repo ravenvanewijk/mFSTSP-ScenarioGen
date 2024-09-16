@@ -326,9 +326,35 @@ class mFSTSPRoute:
 
         # Delete truck at route end
         # It is considered it arrived if it is within 3 metres of the destination, converted to nautical miles.
+        reset_cmd_time = len(self.customers)//5
+        approx_max_endtime = 60*60*len(self.customers) // 4
+
+        if self.uncertainty:
+            time = uncertainty_settings[self.uncertainty]['stop_interval']
+            while time / 60 < reset_cmd_time and time < approx_max_endtime:
+                self.scen_text += (
+                f"00:{'{:02}'.format(time)}:00>"
+                f"ADDOPERATIONPOINTS {trkid} STOP "
+                f"{uncertainty_settings[self.uncertainty]['stop_length']} \n"
+                            )
+                time += uncertainty_settings[self.uncertainty]['stop_interval']
+            # self.scen_text += '\n'
+
         destination_tolerance = 3/1852 
-        self.scen_text += f'00:{"{:02}".format((j * self.scn_lim + i)//100)}:00>{trkid} ATDIST {route_lats[-1]}'
+        self.scen_text += f'00:{'{:02}'.format(reset_cmd_time)}:00>{trkid} ATDIST {route_lats[-1]}'
         self.scen_text += f' {route_lons[-1]} {destination_tolerance} TRKDEL {trkid}\n'
+
+        if self.uncertainty:
+            while time < approx_max_endtime:
+                minutes, seconds = divmod(time, 60)
+                hours, minutes = divmod(minutes, 60)
+                self.scen_text += (
+                f"{'{:02}'.format(hours)}:{'{:02}'.format(minutes)}:{'{:02}'.format(seconds)}>"
+                f"ADDOPERATIONPOINTS {trkid} CURLOC STOP "
+                f"{uncertainty_settings[self.uncertainty]['stop_length']} \n"
+                            )
+                time += uncertainty_settings[self.uncertainty]['stop_interval']
+            # self.scen_text += '\n'
 
         # Change directory to scenario folder
         scenariofolder = '/scenario'
