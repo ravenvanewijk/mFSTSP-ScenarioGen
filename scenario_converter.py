@@ -117,8 +117,8 @@ class mFSTSPRoute:
         # Should already be sorted, redundancy
         self.truckactivities = self.truckactivities.sort_values('startTime')
         # Get all traveling activities
-        self.truckdriving = self.truckactivities[self.truckactivities['Description'].str.startswith(\
-                                                                                    ' Travel from node')]
+        self.truckdriving = self.truckactivities[self.truckactivities['Description'].\
+                                                str.contains(r'\s*Travel from node')]
         # Extract node sequence from traveling activities
         self.cust_nodes = self.truckdriving['Description'].str.extractall(r'(\d+)')
         self.cust_nodes = self.cust_nodes.astype(int)
@@ -141,6 +141,17 @@ class mFSTSPRoute:
                 self.customers.loc[U, 'Route_lat'] = custroute[0].coords[0][1]
                 self.customers.loc[U, 'Route_lon'] = custroute[0].coords[0][0]
             else:
+                if not self.cust_nodes.index(0) == 0:
+                    prevcust = self.cust_nodes[self.cust_nodes.index(0) - 1]
+                    self.customers.loc[U, 'Route_lat'] = self.customers.loc[
+                                        prevcust, 'Route_lat'] 
+                    self.customers.loc[U, 'Route_lon'] = self.customers.loc[
+                                        prevcust, 'Route_lon']
+                else:
+                    self.customers.loc[U, 'Route_lat'] = self.customers.loc[
+                                        U, 'latDeg'] 
+                    self.customers.loc[U, 'Route_lon'] = self.customers.loc[
+                                        U, 'lonDeg']
                 continue
             # Merge the current custroute into the main route
             # add customer route total global route
@@ -179,7 +190,7 @@ class mFSTSPRoute:
         droneactivities = self.data['solution'][self.data['solution']['vehicleType'] == 'UAV']
         # Filter the sorties
         sorties = droneactivities[droneactivities['Description'].str.contains('Fly to UAV customer')]
-        rendezvouss = droneactivities[droneactivities['activityType'] == (' UAV travels empty')]
+        rendezvouss = droneactivities[droneactivities['activityType'].str.contains('UAV travels empty')]
         rendezvouss.loc[:, 'endNode'] = rendezvouss['endNode'].astype(int)
         # Convert rendezvouss to dictionary for quicker lookup
         rendezvouss_dict = {int(row['startNode']): int(row['endNode']) for index, row in rendezvouss.iterrows()}
@@ -207,7 +218,7 @@ class mFSTSPRoute:
         self.truckdeliveries = self.truckactivities[self.truckactivities['Status']==' Making Delivery ']
         self.delivery_nodes = self.truckdeliveries['startNode'].tolist()
 
-    def construct_scenario(self, save_name):
+    def construct_scenario(self):
         route_waypoints = self.route_waypoints
         route_lats = self.route_lats
         route_lons = self.route_lons
@@ -243,7 +254,7 @@ class mFSTSPRoute:
         self.scen_text += "00:00:00>IMPL ROUTE TDRoute\n"
         self.scen_text += f'00:00:00>PAN {route_lats[0]} {route_lons[0]}\n' # Pan to the origin
         self.scen_text += "00:00:00>ZOOM 50\n" # Zoom in
-        log_file = str(len(self.customers) - 2) + '_' + self.sol_file.rstrip('_Heuristic.csv') +\
+        log_file = str(len(self.customers) - 2) + '_' + self.city + '_' + self.sol_file.rstrip('_Heuristic.csv') +\
                         '_MR_' + str(self.uncertainty)
         self.scen_text += f"00:00:00>LOG {log_file} {self.input_dir.split('/')[-1]}\n"
 
@@ -335,7 +346,7 @@ class mFSTSPRoute:
         os.chdir(save_dir)
 
         # Save the text in a scenario file
-        with open(save_name, 'w') as f:
+        with open(log_file + '.scn', 'w') as f:
             f.write(self.scen_text)
 
         os.chdir(os.getcwd().rsplit(scenariofolder, 1)[0])

@@ -13,6 +13,10 @@ class DCScenario:
         self.input_dir = input_dir
         self.sol_file = sol_file
         self.vehicle_group = re.search(r'\d+', self.sol_file).group()
+        # Retreive vehicle data from input and sol file
+        self.get_vehicle_data()
+        specs = self.vehicle_data[self.vehicle_data['% vehicleID'] == '2']
+        self.cruise_speed = ms2kts(specs['cruiseSpeed [m/s]'].item())
         # Load customer locations
         self.customers = pd.read_csv(self.input_dir + '/tbl_locations.csv')
         self.customers.columns = self.customers.columns.str.strip()
@@ -38,15 +42,24 @@ class DCScenario:
         
         self.truckname = 'TRUCK'
 
+    def get_vehicle_data(self):
+        """Load the vehicle data that corresponds with the solution file"""
+        # Load vehicle data from CSV
+        self.vehicle_group = re.search(r'\d+', self.sol_file).group()
+        self.vehicle_data = pd.read_csv(self.input_dir.rsplit('/', 1)[0] + '/' + f"tbl_vehicles_{self.vehicle_group}.csv")
+        # Set the correct row as column names
+        self.vehicle_data.columns = self.vehicle_data.iloc[0]
+        # Drop the column that has been set as column names
+        self.vehicle_data = self.vehicle_data.drop(self.vehicle_data.index[0]) 
 
-    def construct_scenario(self, save_name):
+    def construct_scenario(self):
         # Load all necessary implementations
         self.scen_text = "00:00:00>IMPL ACTIVEWAYPOINT TDActWp\n"
         self.scen_text += "00:00:00>IMPL AUTOPILOT TDAutoPilot\n"
         self.scen_text += "00:00:00>IMPL ROUTE TDRoute\n"
         self.scen_text += f"00:00:00>LOADGRAPH {os.getcwd()}/graphs/{self.city}.graphml\n"
         # Initiate logging with correct args to track results
-        log_file = str(len(self.customers) - 1) + '_' + self.sol_file.rstrip('_Heuristic.csv') +\
+        log_file = str(len(self.customers) - 1) + '_' + self.city + '_' + self.sol_file.rstrip('_Heuristic.csv') +\
                         '_DC_' + str(self.uncertainty)
         self.scen_text += f"00:00:00>LOG {log_file} {self.input_dir.split('/')[-1]}\n"
         # Extract the number of drones from the sol_file name
@@ -57,7 +70,7 @@ class DCScenario:
                                 uncertainty_settings[self.uncertainty]['spd_change_mag'], length=10*int(M))
             self.scen_text += ", ".join(str(v) for v in spd_vars)
         self.scen_text += "\n"
-        self.scen_text += f"00:00:00>DELIVER {self.vehicle_group} {M} "
+        self.scen_text += f"00:00:00>DELIVER {self.vehicle_group} {self.cruise_speed} {M} "
         self.scen_text += (f"{self.input_dir.split('/')[-1]}")
         for index, customer in self.customers.iterrows():
             self.scen_text += f",{customer['latDeg']},{customer['lonDeg']},{customer['del_unc']}"
@@ -90,7 +103,7 @@ class DCScenario:
         os.chdir(save_dir)
 
         # Save the text in a scenario file
-        with open(save_name, 'w') as f:
+        with open(log_file + '.scn', 'w') as f:
             f.write(self.scen_text)
 
         os.chdir(os.getcwd().rsplit(scenariofolder, 1)[0])

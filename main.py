@@ -52,10 +52,10 @@ def make_scen(input_):
     routes.construct_truckroute()
     routes.get_deliveries()
     routes.get_sorties()
-    routes.construct_scenario(sol.split('.')[0] + '.scn')
+    routes.construct_scenario()
 
     react = DCScenario(input_dir, sol, uncertainty)
-    react.construct_scenario(sol.split('.')[0] + '_DC.scn')
+    react.construct_scenario()
 
 if __name__ == "__main__":
     # Set up argument parser
@@ -68,9 +68,9 @@ if __name__ == "__main__":
             default=False, help="Uncertainty included in the scenario.")
     # Parse the arguments
     args = parser.parse_args()
-    args.input_dir = '../mFSTSP/Problems/20170608T121844810174'
+    args.input_dir = '../mFSTSP/Problems/20170608T121710107640'
     args.sol_file = 'tbl_solutions_101_1_Heuristic.csv'
-    args.uncertainty = 'light'
+    args.uncertainty = 'heavy'
     input_arr = main(args.input_dir, args.sol_file, args.uncertainty)
 
     for inp in input_arr:
