@@ -68,13 +68,13 @@ if __name__ == "__main__":
             default=False, help="Uncertainty included in the scenario.")
     # Parse the arguments
     args = parser.parse_args()
-    args.input_dir = '../mFSTSP/Problems/20170608T121710107640'
+    # args.input_dir = '../mFSTSP/Problems/20170606T115303341654'
     # args.sol_file = 'tbl_solutions_101_1_Heuristic.csv'
-    args.uncertainty = 'heavy'
+    # args.uncertainty = 'heavy'
     input_arr = main(args.input_dir, args.sol_file, args.uncertainty)
 
-    for inp in input_arr:
-        make_scen(inp)
+    # for inp in input_arr:
+    #     make_scen(inp)
 
-    # with mp.Pool(4) as p:
-    #     results = list(tqdm.tqdm(p.imap(make_scen, input_arr), total = len(input_arr)))
+    with mp.Pool(4) as p:
+        results = list(tqdm.tqdm(p.imap(make_scen, input_arr), total = len(input_arr)))

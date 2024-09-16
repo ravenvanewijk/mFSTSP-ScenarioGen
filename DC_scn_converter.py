@@ -68,7 +68,7 @@ class DCScenario:
         self.scen_text += f"00:00:00>DRONEUNC "
         if self.uncertainty:
             spd_vars = generate_drone_speed(uncertainty_settings[self.uncertainty]['spd_change_prob'],
-                                uncertainty_settings[self.uncertainty]['spd_change_mag'], length=10*int(M))
+                                uncertainty_settings[self.uncertainty]['spd_change_mag'], length=len(self.customers)*int(M))
             self.scen_text += ", ".join(str(v) for v in spd_vars)
         self.scen_text += "\n"
         self.scen_text += f"00:00:00>DELIVER {self.vehicle_group} {self.cruise_speed} {M} "

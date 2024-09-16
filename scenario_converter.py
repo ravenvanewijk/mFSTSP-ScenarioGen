@@ -65,10 +65,10 @@ class mFSTSPRoute:
                         uncertainty_settings[self.uncertainty]['min_delay'])) + [0]
 
             self.spd_factors = generate_drone_speed(uncertainty_settings[self.uncertainty]['spd_change_prob'],
-                                uncertainty_settings[self.uncertainty]['spd_change_mag'], length=10*int(M))
+                                uncertainty_settings[self.uncertainty]['spd_change_mag'], length=len(self.customers)*int(M))
         else:
             self.customers['del_unc'] = np.zeros(len(self.customers))
-            self.spd_factors = np.zeros(10*int(M))
+            self.spd_factors = np.zeros(len(self.customers)*int(M))
 
         customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
         # 10 km border for the map is sufficient
@@ -129,7 +129,6 @@ class mFSTSPRoute:
         cust_pairs = zip(self.cust_nodes[:-1], self.cust_nodes[1:])
 
         for U, V in cust_pairs:
-            
             custroute, custspdlims, _ = rr.roadroute(self.G, (self.customers.iloc[U]['latDeg'], 
                                             self.customers.iloc[U]['lonDeg']), 
                                             (self.customers.iloc[V]['latDeg'], 
@@ -137,9 +136,30 @@ class mFSTSPRoute:
 
             # Combine all parts into a single LineString
             custroute_linestring = linemerge(custroute)
+
+            if 'Route_lat' in self.customers.columns and not \
+                np.isnan(self.customers.iloc[U]['Route_lat']):
+                if not (self.customers.iloc[U]['Route_lon'], 
+                            self.customers.iloc[U]['Route_lat']) == \
+                        custroute_linestring.coords[0]:
+                    # This is going to result in a multilinestring because 
+                    # taxicab here takes another beginning point than the end 
+                    # point of the existing route. 
+                    # Try again:
+                    custroute, custspdlims, _ = rr.roadroute(self.G, 
+                                            (self.customers.iloc[U]['Route_lat'], 
+                                            self.customers.iloc[U]['Route_lon']), 
+                                            (self.customers.iloc[V]['latDeg'], 
+                                            self.customers.iloc[V]['lonDeg']))
+
+                    # Combine all parts into a single LineString
+                    custroute_linestring = linemerge(custroute)
+
             if len(custroute) > 0: 
                 self.customers.loc[U, 'Route_lat'] = custroute[0].coords[0][1]
                 self.customers.loc[U, 'Route_lon'] = custroute[0].coords[0][0]
+                self.customers.loc[V, 'Route_lat'] = custroute[-1].coords[-1][1]
+                self.customers.loc[V, 'Route_lon'] = custroute[-1].coords[-1][0]
             else:
                 if not self.cust_nodes.index(0) == 0:
                     prevcust = self.cust_nodes[self.cust_nodes.index(0) - 1]
@@ -169,7 +189,8 @@ class mFSTSPRoute:
 
             if type(route) == MultiLineString:
                 raise Exception(f'Resulting route is a MultiLineString from nodes {U} to {V}.'
-                                + ' Possibly the segments do not connect properly.')
+                                + ' Possibly the segments do not connect properly.'
+                                + f'filename: {self.sol_file}, foldername: {self.input_dir}')
 
         # Now that we have the line, we can get the waypoints in LAT LON.
         # The graph is in LON LAT, but BlueSky works with LAT LON.
@@ -341,7 +362,7 @@ class mFSTSPRoute:
             # self.scen_text += '\n'
 
         destination_tolerance = 3/1852 
-        self.scen_text += f'00:{'{:02}'.format(reset_cmd_time)}:00>{trkid} ATDIST {route_lats[-1]}'
+        self.scen_text += f'00:{"{:02}".format(reset_cmd_time)}:00>{trkid} ATDIST {route_lats[-1]}'
         self.scen_text += f' {route_lons[-1]} {destination_tolerance} TRKDEL {trkid}\n'
 
         if self.uncertainty:
