@@ -68,7 +68,7 @@ class mFSTSPRoute:
                                 uncertainty_settings[self.uncertainty]['spd_change_mag'], length=len(self.customers)*int(M))
         else:
             self.customers['del_unc'] = np.zeros(len(self.customers))
-            self.spd_factors = np.zeros(len(self.customers)*int(M))
+            self.spd_factors = np.ones(len(self.customers)*int(M))
 
         customer_latlons = self.customers[['latDeg', 'lonDeg']].to_numpy().tolist()
         # 10 km border for the map is sufficient
@@ -340,7 +340,8 @@ class mFSTSPRoute:
             self.scen_text += f'00:00:00>LNAV {trkid} ON\n'
             self.scen_text += f'00:00:00>VNAV {trkid} ON\n'
         # Turn trail on, tracing for testing
-        self.scen_text += f'00:00:00>TRAIL ON'
+        self.scen_text += f'00:00:00>TRAIL ON \n'
+        self.scen_text += f'00:00:00>FF'
 
         # Add a newline at the end of the addtdwaypoints command
         self.scen_text += '\n'
@@ -353,9 +354,11 @@ class mFSTSPRoute:
         if self.uncertainty:
             time = uncertainty_settings[self.uncertainty]['stop_interval']
             while time / 60 < reset_cmd_time and time < approx_max_endtime:
+                minutes, seconds = divmod(time, 60)
+                hours, minutes = divmod(minutes, 60)
                 self.scen_text += (
-                f"00:{'{:02}'.format(time)}:00>"
-                f"ADDOPERATIONPOINTS {trkid} STOP "
+                f"{'{:02}'.format(hours)}:{'{:02}'.format(minutes)}:{'{:02}'.format(seconds)}>"
+                f"ADDOPERATIONPOINTS {trkid} CURLOC STOP "
                 f"{uncertainty_settings[self.uncertainty]['stop_length']} \n"
                             )
                 time += uncertainty_settings[self.uncertainty]['stop_interval']

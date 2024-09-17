@@ -82,20 +82,22 @@ class DCScenario:
         if self.uncertainty:
             time = uncertainty_settings[self.uncertainty]['stop_interval']
             while time / 60 < reset_cmd_time and time < approx_max_endtime:
+                minutes, seconds = divmod(time, 60)
+                hours, minutes = divmod(minutes, 60)
                 self.scen_text += (
-                f"00:{'{:02}'.format(time)}:00>"
-                f"ADDOPERATIONPOINTS {self.truckname} STOP "
-                f"{uncertainty_settings[self.uncertainty]['stop_length']} \n"
+                f"\n{'{:02}'.format(hours)}:{'{:02}'.format(minutes)}:{'{:02}'.format(seconds)}>"
+                f"ADDOPERATIONPOINTS {self.truckname} CURLOC STOP "
+                f"{uncertainty_settings[self.uncertainty]['stop_length']}"
                             )
                 time += uncertainty_settings[self.uncertainty]['stop_interval']
-            self.scen_text += '\n'
+
 
         destination_tolerance = 3/1852 
         self.scen_text += (
-            f"00:{'{:02}'.format(reset_cmd_time)}:00>"
+            f"\n00:{'{:02}'.format(reset_cmd_time)}:00>"
             f"{self.truckname} ATDIST {self.customers.loc[0]['latDeg']} "
             f"{self.customers.loc[0]['lonDeg']} {destination_tolerance} "
-            f"TRKDEL {self.truckname} \n"
+            f"TRKDEL {self.truckname}"
                         )
 
         if self.uncertainty:
@@ -103,9 +105,9 @@ class DCScenario:
                 minutes, seconds = divmod(time, 60)
                 hours, minutes = divmod(minutes, 60)
                 self.scen_text += (
-                f"{'{:02}'.format(hours)}:{'{:02}'.format(minutes)}:{'{:02}'.format(seconds)}>"
+                f"\n{'{:02}'.format(hours)}:{'{:02}'.format(minutes)}:{'{:02}'.format(seconds)}>"
                 f"ADDOPERATIONPOINTS {self.truckname} CURLOC STOP "
-                f"{uncertainty_settings[self.uncertainty]['stop_length']} \n"
+                f"{uncertainty_settings[self.uncertainty]['stop_length']}"
                             )
                 time += uncertainty_settings[self.uncertainty]['stop_interval']
         # Change directory to scenario folder
