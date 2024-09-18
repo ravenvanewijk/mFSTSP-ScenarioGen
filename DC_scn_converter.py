@@ -57,7 +57,7 @@ class DCScenario:
         self.scen_text = "00:00:00>IMPL ACTIVEWAYPOINT TDActWp\n"
         self.scen_text += "00:00:00>IMPL AUTOPILOT TDAutoPilot\n"
         self.scen_text += "00:00:00>IMPL ROUTE TDRoute\n"
-        self.scen_text += f"00:00:00>LOADGRAPH {os.getcwd()}/graphs/{self.city}.graphml\n"
+        self.scen_text += f"00:00:00>LOADGRAPH ../{os.getcwd().rsplit('/')[-1]}/graphs/{self.city}.graphml\n"
         # Initiate logging with correct args to track results
         log_file = str(len(self.customers) - 1) + '_' + self.city + '_' + self.sol_file.rstrip('_Heuristic.csv') +\
                         '_DC_' + str(self.uncertainty)
@@ -76,31 +76,10 @@ class DCScenario:
         for index, customer in self.customers.iterrows():
             self.scen_text += f",{customer['latDeg']},{customer['lonDeg']},{customer['del_unc']}"
 
-        reset_cmd_time = len(self.customers)//5
         approx_max_endtime = 60*60*len(self.customers) // 4
 
         if self.uncertainty:
             time = uncertainty_settings[self.uncertainty]['stop_interval']
-            while time / 60 < reset_cmd_time and time < approx_max_endtime:
-                minutes, seconds = divmod(time, 60)
-                hours, minutes = divmod(minutes, 60)
-                self.scen_text += (
-                f"\n{'{:02}'.format(hours)}:{'{:02}'.format(minutes)}:{'{:02}'.format(seconds)}>"
-                f"ADDOPERATIONPOINTS {self.truckname} CURLOC STOP "
-                f"{uncertainty_settings[self.uncertainty]['stop_length']}"
-                            )
-                time += uncertainty_settings[self.uncertainty]['stop_interval']
-
-
-        destination_tolerance = 3/1852 
-        self.scen_text += (
-            f"\n00:{'{:02}'.format(reset_cmd_time)}:00>"
-            f"{self.truckname} ATDIST {self.customers.loc[0]['latDeg']} "
-            f"{self.customers.loc[0]['lonDeg']} {destination_tolerance} "
-            f"TRKDEL {self.truckname}"
-                        )
-
-        if self.uncertainty:
             while time < approx_max_endtime:
                 minutes, seconds = divmod(time, 60)
                 hours, minutes = divmod(minutes, 60)
@@ -110,6 +89,7 @@ class DCScenario:
                 f"{uncertainty_settings[self.uncertainty]['stop_length']}"
                             )
                 time += uncertainty_settings[self.uncertainty]['stop_interval']
+
         # Change directory to scenario folder
         scenariofolder = '/scenario'
 
