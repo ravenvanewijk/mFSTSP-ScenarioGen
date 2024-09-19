@@ -236,7 +236,7 @@ class mFSTSPRoute:
         """This method generates a set of delivery nodes based on the data of the solution.
         Can be used to make a scenario text with it."""
 
-        self.truckdeliveries = self.truckactivities[self.truckactivities['Status']==' Making Delivery ']
+        self.truckdeliveries = self.truckactivities[self.truckactivities['Status'].str.contains('Making Delivery')]
         self.delivery_nodes = self.truckdeliveries['startNode'].tolist()
 
     def construct_scenario(self):
