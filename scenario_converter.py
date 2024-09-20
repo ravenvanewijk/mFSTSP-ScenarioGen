@@ -365,8 +365,8 @@ class mFSTSPRoute:
             # self.scen_text += '\n'
 
         destination_tolerance = 3/1852 
-        self.scen_text += f'00:{"{:02}".format(reset_cmd_time)}:00>{trkid} ATDIST {route_lats[-1]}'
-        self.scen_text += f' {route_lons[-1]} {destination_tolerance} TRKDEL {trkid}\n'
+        self.scen_text += f'00:{"{:02}".format(reset_cmd_time)}:00>'
+        self.scen_text += f'TRKDEL {trkid}\n'
 
         if self.uncertainty:
             while time < approx_max_endtime:
