@@ -28,7 +28,7 @@ pyproj==3.6.1
 python-dateutil==2.9.0.post0
 pytz==2024.1
 requests==2.32.3
-roadroute-lib @ git+https://github.com/ravenvanewijk/roadroute-lib.git@926ebdbbda301d367aadbdcef9644b91f97bc52d
+roadroute-lib @ git+https://github.com/ravenvanewijk/roadroute-lib.git@02b0923c53b03962862fdaa60320d7a9e9b1b5b2
 setuptools==69.5.1
 shapely==2.0.4
 six==1.16.0
