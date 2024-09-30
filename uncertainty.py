@@ -18,8 +18,8 @@ def generate_delivery_times(n, desired_mu_delay=10, min_delay=-10,
     mu_dist = desired_mu_delay - min_delay
     np.random.seed(seed)  # Set the seed for reproducibility
     scale_parameter = mu_dist / shape_parameter  # θ = μ / k
-    delivery_times = np.random.gamma(shape=shape_parameter, scale=scale_parameter, size=n)
-    return delivery_times + min_delay
+    delay_times = np.random.gamma(shape=shape_parameter, scale=scale_parameter, size=n)
+    return delay_times + min_delay
 
 def generate_drone_speed(prob, mag, length=1):
     """This function randomly determines whether a drone travels at its usual 
