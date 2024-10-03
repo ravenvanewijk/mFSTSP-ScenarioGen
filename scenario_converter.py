@@ -410,7 +410,7 @@ class mFSTSPRoute:
         for node in self.delivery_nodes:
             self.scen_text += f"\n00:00:00>ADDOPERATIONPOINTS {trkid} {self.customers.loc[node]['Route_lat']}/" + \
                             f"{self.customers.loc[node]['Route_lon']}, DELIVERY, "+\
-                            f"{float(specs['serviceTime [sec]'].item()) + self.customers['del_unc'][node]}"
+                            f"{float(specs['serviceTime [sec]'].item()) + self.customers['del_unc'][node]}, {node}"
 
     def sortie_scen(self, trkid, UAVnumber):
         """Function that writes the text of sorties on top of existing text. This should come after the waypoints have
@@ -439,7 +439,7 @@ class mFSTSPRoute:
                             f"{j_lon}, {k_coords}, {m2ft(specs['cruiseAlt [m]'].item())}, "+\
                             f"{self.spd_factors[count] * ms2kts(specs['cruiseSpeed [m/s]'].item())}, " +\
                             f"{float(specs['serviceTime [sec]'].item()) + self.customers['del_unc'][j]}, " +\
-                            f"{specs['recoveryTime [sec]'].item()}"
+                            f"{specs['recoveryTime [sec]'].item()}, {j}"
                 count += 1
 
     def add_truck_timing(self, trkid):

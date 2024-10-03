@@ -61,13 +61,13 @@ def plot_delivery_times(delivery_times, mean_delivery_time):
 # plot_delivery_times(de, 10)
 
 uncertainty_settings = {
-            'light': {'mu_del': 10, 'min_delay': -10,
+            'low': {'mu_del': 10, 'min_delay': -10,
                         'spd_change_prob': 0.2, 'spd_change_mag': 0.2,
                         'stop_length': 30, 'stop_interval': 360},
             'medium': {'mu_del': 30, 'min_delay': -15,
                         'spd_change_prob': 0.5, 'spd_change_mag': 0.3,
                         'stop_length': 30, 'stop_interval': 240},
-            'heavy': {'mu_del': 60, 'min_delay': -20,
+            'high': {'mu_del': 60, 'min_delay': -20,
                         'spd_change_prob': 0.8, 'spd_change_mag': 0.4,
                         'stop_length': 30, 'stop_interval': 120}
                         }
