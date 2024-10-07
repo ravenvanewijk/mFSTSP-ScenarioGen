@@ -136,7 +136,10 @@ class mFSTSPRoute:
 
             # Combine all parts into a single LineString
             custroute_linestring = linemerge(custroute)
-
+            if custroute_linestring.is_empty:
+                self.customers.loc[V, 'Route_lat'] = self.customers.loc[U, 'Route_lat']
+                self.customers.loc[V, 'Route_lon'] = self.customers.loc[U, 'Route_lon']
+                continue
             if 'Route_lat' in self.customers.columns and not \
                 np.isnan(self.customers.iloc[U]['Route_lat']):
                 if not (self.customers.iloc[U]['Route_lon'], 

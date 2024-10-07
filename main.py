@@ -68,9 +68,9 @@ if __name__ == "__main__":
             default=False, help="Uncertainty included in the scenario.")
     # Parse the arguments
     args = parser.parse_args()
-    # args.input_dir = '../mFSTSP/Problems/20170606T123216270309'
-    # args.sol_file = 'tbl_solutions_101_1_Heuristic.csv'
-    args.uncertainty = 'high'
+    # args.input_dir = '../mFSTSP/Problems/20170606T124502755142'
+    # args.sol_file = 'tbl_solutions_101_3_Heuristic.csv'
+    args.uncertainty = False
     input_arr = main(args.input_dir, args.sol_file, args.uncertainty)
 
     # for inp in input_arr:
